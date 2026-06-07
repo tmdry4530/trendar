@@ -1,0 +1,21 @@
+/* QueryForm.module.css — 새 조건 추가 폼 레이아웃 */
+
+.formRow {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.queryInput {
+  flex: 2;
+  min-width: 0;
+}
+
+.typeSelect {
+  flex: 0 0 120px;
+}
+
+.submitBtn {
+  flex-shrink: 0;
+  align-self: stretch;
+}

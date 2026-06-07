@@ -1,0 +1,44 @@
+/* RepoRow.module.css */
+
+.cellIcon {
+  width: 40px;
+  padding-left: 8px;
+  padding-right: 4px;
+}
+
+.starOn {
+  color: var(--accent);
+  font-size: 16px;
+  line-height: 1;
+  filter: drop-shadow(var(--glow-up));
+}
+
+.starOff {
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1;
+}
+
+.cellRepo {
+  min-width: 0;
+  max-width: 340px;
+}
+
+.desc {
+  font-size: 11.5px;
+  margin-top: 2px;
+  max-width: 320px;
+}
+
+.deltaSmall {
+  font-size: 11px;
+  margin-top: 2px;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.cellAction {
+  width: 60px;
+  text-align: right;
+  padding-right: 8px;
+}

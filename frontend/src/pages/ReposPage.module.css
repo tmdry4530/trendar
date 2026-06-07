@@ -1,0 +1,23 @@
+/* ReposPage.module.css */
+
+.toolbar {
+  margin-bottom: var(--gap);
+}
+
+.searchInput {
+  flex: 2;
+  min-width: 180px;
+}
+
+.filterSelect {
+  flex: 1;
+  min-width: 120px;
+}
+
+.tableWrap {
+  margin-bottom: var(--gap);
+}
+
+.pagination {
+  padding: 10px 4px;
+}

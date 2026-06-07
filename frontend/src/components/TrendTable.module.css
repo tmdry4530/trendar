@@ -1,0 +1,21 @@
+/* TrendTable.module.css */
+
+.repoCell {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  max-width: 220px;
+}
+
+.deltaWrap {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.growthRate {
+  font-family: var(--mono);
+  font-size: 10.5px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}

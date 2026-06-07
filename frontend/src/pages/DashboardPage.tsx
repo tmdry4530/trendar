@@ -1,0 +1,104 @@
+// DashboardPage.tsx — 대시보드: 통계 카드 4개 + Top Movers 테이블 + 언어 분포 바
+import { useAsync } from '../lib/useAsync';
+import { getStats, getTrends, getLanguages } from '../api/stats';
+import { formatRelativeTime, formatInt } from '../lib/format';
+import { LoadingState, ErrorState } from '../components/States';
+import StatCard from '../components/StatCard';
+import TrendTable from '../components/TrendTable';
+import LanguageBars from '../components/LanguageBars';
+import styles from './DashboardPage.module.css';
+
+export default function DashboardPage() {
+  const stats = useAsync(() => getStats(), []);
+  const trends = useAsync(() => getTrends(10), []);
+  const languages = useAsync(() => getLanguages(), []);
+
+  return (
+    <div className="page">
+      <div className="page__title">DASHBOARD</div>
+
+      {/* ── 통계 카드 4개 ──────────────────────────────────────────────── */}
+      <div className="stagger grid-4" style={{ marginBottom: 'var(--gap)' }}>
+        {stats.loading ? (
+          <>
+            <StatCard label="Repos" value="—" hint="추적 레포" />
+            <StatCard label="Active Queries" value="—" hint="활성 조건" />
+            <StatCard label="Bookmarked" value="—" hint="북마크" />
+            <StatCard label="Last ETL" value="—" hint="마지막 수집" accent />
+          </>
+        ) : stats.error ? (
+          <div style={{ gridColumn: '1 / -1' }}>
+            <ErrorState message={stats.error} onRetry={stats.reload} />
+          </div>
+        ) : stats.data ? (
+          <>
+            <StatCard
+              label="Repos"
+              value={formatInt(stats.data.total_repos)}
+              hint="추적 레포"
+            />
+            <StatCard
+              label="Active Queries"
+              value={formatInt(stats.data.active_queries)}
+              hint="활성 조건"
+            />
+            <StatCard
+              label="Bookmarked"
+              value={formatInt(stats.data.bookmarked)}
+              hint="북마크"
+            />
+            <StatCard
+              label="Last ETL"
+              value={stats.data.last_etl_at ? formatRelativeTime(stats.data.last_etl_at) : '—'}
+              hint={stats.data.last_etl_at ? '마지막 수집' : '아직 없음'}
+              accent
+            />
+          </>
+        ) : null}
+      </div>
+
+      {/* ── 두 컬럼: Top Movers + 언어 분포 ──────────────────────────── */}
+      <div className="row">
+        {/* Top Movers */}
+        <div className={`col ${styles.trendCol}`}>
+          <div className="panel panel--flush">
+            <div className="panel__head" style={{ padding: 'var(--pad) var(--pad) 0' }}>
+              <span className="panel__title">Top Movers</span>
+            </div>
+            <div className={styles.panelBody}>
+              {trends.loading ? (
+                <div style={{ padding: 'var(--pad)' }}>
+                  <LoadingState />
+                </div>
+              ) : (
+                <TrendTable
+                  data={trends.data}
+                  loading={trends.loading}
+                  error={trends.error}
+                  onRetry={trends.reload}
+                />
+              )}
+            </div>
+          </div>
+        </div>
+
+        {/* 언어 분포 */}
+        <div className={`col ${styles.langCol}`}>
+          <div className="panel">
+            <div className="panel__head">
+              <span className="panel__title">언어 분포</span>
+            </div>
+            <div className={styles.panelBody}>
+              <LanguageBars
+                data={languages.data}
+                loading={languages.loading}
+                error={languages.error}
+                onRetry={languages.reload}
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

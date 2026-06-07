@@ -1,0 +1,43 @@
+/* StarChart.module.css — 커스텀 tooltip 스타일. hex 값은 tokens.css 미러. */
+
+.tooltip {
+  background: var(--surface);        /* #14171c */
+  border: 1px solid var(--line);     /* #232830 */
+  border-radius: var(--radius-sm);
+  padding: 10px 13px;
+  font-family: var(--mono);
+  font-size: 12px;
+  min-width: 130px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.45);
+}
+
+.tooltipDate {
+  color: var(--muted);
+  font-size: 11px;
+  margin-bottom: 6px;
+  letter-spacing: 0.3px;
+}
+
+.tooltipRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.6;
+}
+
+.tooltipStar {
+  color: var(--accent);
+  font-size: 11px;
+}
+
+.tooltipVal {
+  color: var(--text);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tooltipMuted {
+  color: var(--muted);
+  font-size: 11px;
+}

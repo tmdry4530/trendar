@@ -1,0 +1,54 @@
+/* QueriesPage.module.css — Queries 페이지 레이아웃 보조 */
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.title {
+  /* inherits .page__title via className, no margin-bottom override needed */
+  margin-bottom: 0 !important;
+}
+
+.tableWrap {
+  overflow-x: auto;
+}
+
+.queryCell {
+  min-width: 220px;
+  max-width: 380px;
+}
+
+.editRow {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.editInput {
+  flex: 1;
+  min-width: 0;
+}
+
+.editSelect {
+  flex: 0 0 110px;
+}
+
+.actionsCell {
+  white-space: nowrap;
+}
+
+.actionsGap {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.etlSpinner {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}

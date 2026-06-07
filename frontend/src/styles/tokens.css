@@ -1,0 +1,49 @@
+/* tokens.css — 디자인 토큰 (CLAUDE.md §3).
+   다크 "레이더 관제소" 무드. 단일 강조색(포스포 그린). 모노스페이스 디스플레이. */
+:root {
+  /* surfaces */
+  --bg: #0d0f12;
+  --bg-grid: rgba(255, 255, 255, 0.018);
+  --surface: #14171c;
+  --surface-2: #181c22;
+  --surface-3: #1d222a;
+  --line: #232830;
+  --line-soft: #1b2027;
+
+  /* text */
+  --text: #e6e9ef;
+  --muted: #8b93a1;
+  --faint: #5b6472;
+
+  /* semantic */
+  --up: #3ddc84;
+  --down: #e0a458;
+  --accent: #3ddc84;
+  --accent-dim: #2aa563;
+  --accent-soft: rgba(61, 220, 132, 0.12);
+  --danger: #e0556b;
+  --danger-soft: rgba(224, 85, 107, 0.12);
+
+  /* glows */
+  --glow-up: 0 0 14px rgba(61, 220, 132, 0.30);
+  --glow-soft: 0 0 0 1px rgba(61, 220, 132, 0.25);
+
+  /* type */
+  --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --sans: "IBM Plex Sans", system-ui, -apple-system, "Segoe UI", sans-serif;
+
+  /* metrics */
+  --radius: 7px;
+  --radius-sm: 5px;
+  --radius-pill: 999px;
+  --gap: 14px;
+  --pad: 16px;
+  --maxw: 1120px;
+
+  /* motion */
+  --ease: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  /* z */
+  --z-nav: 50;
+  --z-toast: 1000;
+}

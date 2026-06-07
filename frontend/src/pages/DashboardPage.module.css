@@ -1,0 +1,16 @@
+/* DashboardPage.module.css */
+
+.trendCol {
+  flex: 2;
+  min-width: 0;
+}
+
+.langCol {
+  flex: 1;
+  min-width: 200px;
+}
+
+.panelBody {
+  /* inner scroll if content overflows */
+  min-height: 120px;
+}
