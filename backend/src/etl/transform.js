@@ -1,7 +1,8 @@
-export function normalizeRepo(raw, queryId) {
+export function normalizeRepo(raw, queryId, userId) {
   return {
     github_id: raw.id,
     query_id: queryId,
+    user_id: userId,
     full_name: raw.full_name,
     owner: raw.owner?.login ?? raw.full_name.split('/')[0],
     name: raw.name,

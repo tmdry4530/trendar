@@ -34,7 +34,7 @@ created: 2026-07-13
   - 요구사항: R2.2–R2.5, R4.1, R4.2
   - 완료 조건: `npm test` 통과, 모든 SQL에 user_id 조건 포함(diff 리뷰로 전수 확인)
 
-- [ ] **T6. ETL 사용자별 토큰 전환**
+- [x] **T6. ETL 사용자별 토큰 전환**
   - 내용: `etl/extract.js` 전역 Octokit 제거 → `extractRepos(query, octokit)` 주입. `etl/pipeline.js` — `runPipelineForUser(userId, {queryId})`(토큰 복호화→Octokit 생성→해당 사용자 쿼리 수집→`users.last_etl_*` 갱신, GitHub 401 시 `token_invalid=TRUE`·토큰 NULL), `runPipelineAllUsers()`(유효 토큰 사용자 순차 순회, 사용자 단위 try/catch), 인메모리 per-user 실행 락(중복 시 409), 전역 `etlState` 제거. `etl.controller.js` 본인 스코프로 수정, `server.js` cron을 `runPipelineAllUsers`로 교체, env `GITHUB_TOKEN` 의존 삭제. `backend/test/pipeline.test.js`(Octokit·모델 스텁 — 401 사용자 스킵 후 다음 사용자 계속).
   - 요구사항: R3.2–R3.6
   - 완료 조건: `npm test` 통과 (토큰 무효 격리 시나리오 포함)
