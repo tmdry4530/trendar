@@ -1,0 +1,60 @@
+.wrap {
+  min-height: 70vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade-up 0.4s var(--ease) both;
+}
+.card {
+  width: min(360px, 100%);
+  padding: 32px 28px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 4px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-family: var(--mono);
+}
+.logo {
+  color: var(--accent);
+  font-size: 22px;
+  text-shadow: var(--glow-up);
+}
+.brandName {
+  font-weight: 600;
+  letter-spacing: 1px;
+  font-size: 19px;
+}
+.tagline {
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+  margin: 8px 0 24px;
+}
+.errorBanner {
+  width: 100%;
+  background: var(--danger-soft);
+  border: 1px solid var(--danger);
+  border-radius: var(--radius-sm);
+  color: var(--danger);
+  font-size: 12.5px;
+  line-height: 1.5;
+  padding: 10px 12px;
+  margin-bottom: 18px;
+}
+.loginBtn {
+  width: 100%;
+  justify-content: center;
+  padding: 11px 16px;
+  font-size: 13.5px;
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}

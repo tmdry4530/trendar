@@ -46,42 +46,51 @@ interface RequestOptions {
 export async function request<T>(path: string, opts: RequestOptions = {}): Promise<T> {
   const { method = 'GET', query, body } = opts;
 
-  if (USE_MOCK) {
-    return mockFetch<T>(method, path, query, body);
-  }
-
-  const url = `/api${path}${buildQuery(query)}`;
-
-  let res: Response;
   try {
-    res = await fetch(url, {
-      method,
-      headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
-  } catch {
-    // 네트워크 실패 = 백엔드 미기동일 가능성이 높다.
-    throw new ApiError(
-      '백엔드에 연결할 수 없습니다. localhost:4000 서버가 실행 중인지 확인하세요.',
-      'NETWORK_ERROR',
-      0,
-    );
-  }
+    if (USE_MOCK) {
+      return await mockFetch<T>(method, path, query, body);
+    }
 
-  let payload: ApiEnvelope<T> | null = null;
-  try {
-    payload = (await res.json()) as ApiEnvelope<T>;
-  } catch {
-    payload = null;
-  }
+    const url = `/api${path}${buildQuery(query)}`;
 
-  if (!res.ok || !payload || payload.ok === false) {
-    const code = payload?.error?.code ?? 'INTERNAL_ERROR';
-    const message = payload?.error?.message ?? `요청에 실패했습니다 (HTTP ${res.status}).`;
-    throw new ApiError(message, code, res.status);
-  }
+    let res: Response;
+    try {
+      res = await fetch(url, {
+        method,
+        headers: body !== undefined ? { 'Content-Type': 'application/json' } : undefined,
+        body: body !== undefined ? JSON.stringify(body) : undefined,
+      });
+    } catch {
+      // 네트워크 실패 = 백엔드 미기동일 가능성이 높다.
+      throw new ApiError(
+        '백엔드에 연결할 수 없습니다. localhost:4000 서버가 실행 중인지 확인하세요.',
+        'NETWORK_ERROR',
+        0,
+      );
+    }
 
-  return payload.data as T;
+    let payload: ApiEnvelope<T> | null = null;
+    try {
+      payload = (await res.json()) as ApiEnvelope<T>;
+    } catch {
+      payload = null;
+    }
+
+    if (!res.ok || !payload || payload.ok === false) {
+      const code = payload?.error?.code ?? 'INTERNAL_ERROR';
+      const message = payload?.error?.message ?? `요청에 실패했습니다 (HTTP ${res.status}).`;
+      throw new ApiError(message, code, res.status);
+    }
+
+    return payload.data as T;
+  } catch (err) {
+    // 세션 만료 공통 처리: /auth/me 자체의 401(최초 인증 확인)은 제외하고,
+    // 그 외 401은 AuthContext 가 구독해 즉시 anon 전환 + 로그인 화면으로 보낸다.
+    if (err instanceof ApiError && err.status === 401 && path !== '/auth/me') {
+      window.dispatchEvent(new Event('auth:unauthorized'));
+    }
+    throw err;
+  }
 }
 
 export const api = {

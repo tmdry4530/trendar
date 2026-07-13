@@ -134,3 +134,16 @@ export interface EtlStatus {
 export interface DeletedResult {
   deleted: boolean;
 }
+
+/** GET /api/auth/me 응답의 user */
+export interface AuthUser {
+  login: string;
+  name: string | null;
+  avatarUrl: string | null;
+}
+
+/** GET /api/auth/me 응답 */
+export interface Me {
+  user: AuthUser;
+  tokenInvalid: boolean;
+}

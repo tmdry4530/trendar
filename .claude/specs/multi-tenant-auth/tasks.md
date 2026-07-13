@@ -39,7 +39,7 @@ created: 2026-07-13
   - 요구사항: R3.2–R3.6
   - 완료 조건: `npm test` 통과 (토큰 무효 격리 시나리오 포함)
 
-- [ ] **T7. 프론트 인증 기반 (AuthContext·LoginPage·라우트 가드)**
+- [x] **T7. 프론트 인증 기반 (AuthContext·LoginPage·라우트 가드)**
   - 내용: `frontend/src/auth/AuthContext.tsx`(`GET /api/auth/me` 1회 → loading/authed/anon, logout·deleteAccount 제공), `pages/LoginPage.tsx`(`/login` — 서비스 소개 + `<a href="/api/auth/github">` 버튼, `?error=` 배너), `App.tsx` 라우트 가드(anon→`/login`, 로그인 상태의 `/login`→`/`, loading 스피너), `api/client.ts` 401 공통 처리 → `/login` 이동, mock 모드(`VITE_USE_MOCK`)에 가짜 me 추가.
   - 요구사항: R1.1, R1.2(리다이렉트 수신), R1.3, R1.5
   - 완료 조건: `cd frontend && npm run build` 통과, mock 모드로 가드·로그인 화면 수동 확인

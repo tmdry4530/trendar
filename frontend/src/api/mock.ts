@@ -17,6 +17,7 @@ import type {
   DeletedResult,
   QueryType,
   RepoSort,
+  Me,
 } from '../types';
 
 type MockRepo = Repo & { note: string | null; first_seen_at: string };
@@ -105,6 +106,10 @@ export async function mockFetch<T>(
   await delay(280); // 로딩 상태를 보이게 하는 인위적 지연
   const m = method.toUpperCase();
 
+  if (path === '/auth/me' && m === 'GET') return meResponse() as T;
+  if (path === '/auth/logout' && m === 'POST') return null as T;
+  if (path === '/auth/account' && m === 'DELETE') return null as T;
+
   if (path === '/queries' && m === 'GET') return listQueries() as T;
   if (path === '/queries' && m === 'POST') return createQuery(body) as T;
   const qId = path.match(/^\/queries\/(\d+)$/);
@@ -133,6 +138,11 @@ export async function mockFetch<T>(
   if (path === '/trends' && m === 'GET') return trends(query) as T;
 
   throw new ApiError(`목 핸들러가 없습니다: ${method} ${path}`, 'NOT_FOUND', 404);
+}
+
+// ── auth ────────────────────────────────────────────────────────────────────
+function meResponse(): Me {
+  return { user: { login: 'demo', name: 'Demo User', avatarUrl: null }, tokenInvalid: false };
 }
 
 // ── queries ─────────────────────────────────────────────────────────────────
