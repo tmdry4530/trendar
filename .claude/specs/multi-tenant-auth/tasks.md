@@ -19,7 +19,7 @@ created: 2026-07-13
   - 요구사항: R6.1, R5.1(CASCADE 경로), R2(스키마 기반)
   - 완료 조건: 두 파일의 DDL이 design §3과 일치, 기존 `npm test` 회귀 없음
 
-- [ ] **T3. user·session 모델 + requireAuth 미들웨어**
+- [x] **T3. user·session 모델 + requireAuth 미들웨어**
   - 내용: `backend/src/models/user.model.js`(upsertFromGithub, findById, setTokenInvalid, updateEtlResult, deleteById 등)·`session.model.js`(create, findValidByHash, deleteByHash, deleteExpired) 신규. `backend/src/middleware/requireAuth.js` — `sid` 쿠키 → 해시 → 세션·사용자 조회 → `req.user` 부착, 실패·만료 시 401(만료 행 삭제). `backend/test/requireAuth.test.js`(모델 스텁 주입).
   - 요구사항: R2.1, R1.5
   - 완료 조건: `npm test` 통과 (쿠키 없음/무효/만료 → 401, 유효 → `req.user`)
