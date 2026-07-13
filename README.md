@@ -1,6 +1,6 @@
 # AgentRadar 🛰️
 
-**데모** : <https://agent-rader-production.up.railway.app>
+**데모** : <https://agent-rader-production.up.railway.app> — GitHub 계정으로 로그인해 사용하는 멀티테넌트 서비스다. 검색 조건·수집 레포·북마크가 사용자별로 격리되고, 수집은 각자의 OAuth 토큰으로 실행된다.
 
 > **AI 에이전트 스킬·툴 GitHub 트렌드 모니터** — 사용자가 등록한 검색 조건에 매칭되는 GitHub 레포만 선별 수집하고, 시점별 스냅샷을 쌓아 **스타 증가율(추세)**을 계산하는 목적형 수집기.
 
@@ -23,14 +23,14 @@ agent-radar/
 
 ```bash
 # 1) 데이터베이스
-mysql -u root -p < db/schema.sql
+mysql -u root -p < db/schema.sql   # (선택) 백엔드가 부팅 시 자동 생성하기도 한다
 
 # 2) 백엔드
 cd backend
-cp .env.example .env          # DB 정보 + GITHUB_TOKEN (+ 선택: ETL_MIN_STARS)
+cp .env.example .env          # DB 정보 + GitHub OAuth App + TOKEN_ENCRYPTION_KEY
 npm install
 npm run dev                   # http://localhost:4000
-npm run etl                   # (선택) 초기 데이터 1회 적재
+npm test                      # 단위 테스트 (node:test)
 
 # 3) 프론트엔드
 cd frontend
@@ -38,9 +38,17 @@ npm install
 npm run dev                   # http://localhost:5173 (/api 는 4000으로 프록시)
 ```
 
-> **팁** — 백엔드 없이 UI 전체를 데모하려면 `frontend/.env.local`에 `VITE_USE_MOCK=true`를 두고 `npm run dev` 하면 인메모리 목 데이터로 동작한다. 기본값은 실제 API 호출이다.
+> **팁** — 백엔드 없이 UI 전체를 데모하려면 `frontend/.env.local`에 `VITE_USE_MOCK=true`를 두고 `npm run dev` 하면 인메모리 목 데이터 + 가짜 로그인으로 동작한다. 기본값은 실제 API 호출이다.
 
-> **참고** — `GITHUB_TOKEN`은 공개 레포 검색만 하므로 **스코프 없이**(classic) 또는 "Public Repositories, read-only"(fine-grained)로 발급하면 된다. 토큰은 권한이 아니라 레이트리밋(5,000 req/hr)을 위해 쓴다.
+### GitHub OAuth App 설정
+
+로그인과 수집 모두 사용자의 GitHub OAuth 토큰을 쓴다. [GitHub OAuth App](https://github.com/settings/developers)을 등록하고 `GITHUB_CLIENT_ID`/`GITHUB_CLIENT_SECRET`을 `.env`에 넣는다.
+
+- OAuth App은 콜백 URL을 1개만 지원하므로 **dev용/prod용 앱을 각각 등록**한다.
+  - dev 콜백: `http://localhost:5173/api/auth/github/callback`
+  - prod 콜백: `https://<배포 도메인>/api/auth/github/callback`
+- 스코프는 요청하지 않는다(공개 레포 검색 + 공개 프로필만 사용). 토큰은 사용자별 레이트리밋(5,000 req/hr) 확보 용도이며 AES-256-GCM으로 암호화 저장된다.
+- `TOKEN_ENCRYPTION_KEY`(64자 hex)와 `APP_URL`은 필수 — 프로덕션에서 누락 시 부팅이 실패한다. 키 생성: `node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"`
 
 ---
 
@@ -163,12 +171,13 @@ items[0] = {
 
 ### 2-2. 비기능적 요구사항
 
-- **레이트리밋** — GitHub 토큰(5,000 req/hr), 조건당 검색 1~2회로 제한
-- **멱등성** — `github_id` upsert로 중복 행 금지, 스냅샷만 누적
-- **정합성** — repo는 유효한 watch_query에, snapshot은 유효한 repo에 연결(FK `ON DELETE CASCADE`)
-- **에러 처리** — 일관된 `{ ok:false, error }` JSON, 조건별 실패 격리(부분 실패 허용)
+- **레이트리밋** — 사용자별 OAuth 토큰(각 5,000 req/hr)으로 수집을 분산, 조건당 검색 1~2회로 제한
+- **테넌트 격리** — 모든 데이터가 사용자별로 완전 격리(`user_id` 스코프), 비인증 API는 401, 타인 리소스는 404
+- **멱등성** — `(user_id, github_id)` upsert로 중복 행 금지, 스냅샷만 누적
+- **정합성** — repo는 유효한 watch_query에, snapshot은 유효한 repo에 연결(FK `ON DELETE CASCADE`), 계정 탈퇴 시 토큰 포함 전체 데이터 연쇄 삭제
+- **에러 처리** — 일관된 `{ ok:false, error }` JSON, 사용자·조건별 실패 격리(한 사용자의 토큰 무효가 다른 사용자 수집에 영향 없음)
 - **3-상태 UI** — 모든 비동기 호출에 로딩/에러/빈 상태 처리, 백엔드 미기동 시 크래시 없이 토스트 안내
-- **환경 분리** — `GITHUB_TOKEN` / DB 접속정보는 `.env`로 분리 (커밋 금지)
+- **환경 분리** — OAuth 클라이언트/암호화 키/DB 접속정보는 `.env`로 분리 (커밋 금지), OAuth 토큰은 DB에 암호화 저장
 - **디자인** — 다크 "레이더 관제소" 관측 도구 UI, 등폭 숫자, 높은 정보 밀도
 
 ---

@@ -49,7 +49,7 @@ created: 2026-07-13
   - 요구사항: R1.7, R5.3, R3.4
   - 완료 조건: `npm run build` 통과, mock 모드 수동 확인
 
-- [ ] **T9. env·문서·배포 설정 정리**
+- [x] **T9. env·문서·배포 설정 정리**
   - 내용: `backend/.env.example` 갱신(`GITHUB_CLIENT_ID/SECRET`, `TOKEN_ENCRYPTION_KEY`, `APP_URL`, `SESSION_TTL_DAYS`, `MAX_QUERIES_PER_USER` 추가, `GITHUB_TOKEN` 제거), README 갱신(OAuth App dev/prod 2개 등록 안내·콜백 URL·빠른 시작 반영), Dockerfile 영향 점검. 수동 E2E 체크리스트를 tasks.md 하단에 정리.
   - 요구사항: R6.2, R1.6(스코프 안내)
   - 완료 조건: 필수 env가 문서에 전부 명시, `npm test`·`npm run build` 최종 통과
