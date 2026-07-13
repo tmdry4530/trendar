@@ -14,7 +14,7 @@ created: 2026-07-13
   - 요구사항: R3.1
   - 완료 조건: `cd backend && npm test` 통과
 
-- [ ] **T2. DB 스키마 v2 + 레거시 리셋**
+- [x] **T2. DB 스키마 v2 + 레거시 리셋**
   - 내용: `db/schema.sql`과 `backend/src/db/init.js`를 v2로 갱신(두 파일 동기) — `users`·`sessions` 신설, `watch_queries`·`repos`에 `user_id` FK(CASCADE) 추가, `UNIQUE(github_id)` → `UNIQUE(user_id, github_id)`, `UNIQUE(query, query_type)` → `UNIQUE(user_id, query, query_type)`. init.js에 레거시 감지(`users` 없음 && `repos` 존재) → 레거시 테이블 DROP. 시드 쿼리 삽입 제거.
   - 요구사항: R6.1, R5.1(CASCADE 경로), R2(스키마 기반)
   - 완료 조건: 두 파일의 DDL이 design §3과 일치, 기존 `npm test` 회귀 없음
