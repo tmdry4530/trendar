@@ -60,13 +60,15 @@ export async function remove(userId, id) {
 }
 
 export async function stats(userId) {
-  const [[a]] = await pool.query('SELECT COUNT(*) AS c FROM repos WHERE user_id = ?', [userId]);
-  const [[b]] = await pool.query('SELECT COUNT(*) AS c FROM watch_queries WHERE is_active = 1 AND user_id = ?', [userId]);
-  const [[c]] = await pool.query('SELECT COUNT(*) AS c FROM repos WHERE is_bookmarked = 1 AND user_id = ?', [userId]);
-  const [[d]] = await pool.query(
-    'SELECT MAX(s.captured_at) AS t FROM repo_snapshots s JOIN repos r ON r.id = s.repo_id WHERE r.user_id = ?',
-    [userId]
-  );
+  const [[[a]], [[b]], [[c]], [[d]]] = await Promise.all([
+    pool.query('SELECT COUNT(*) AS c FROM repos WHERE user_id = ?', [userId]),
+    pool.query('SELECT COUNT(*) AS c FROM watch_queries WHERE is_active = 1 AND user_id = ?', [userId]),
+    pool.query('SELECT COUNT(*) AS c FROM repos WHERE is_bookmarked = 1 AND user_id = ?', [userId]),
+    pool.query(
+      'SELECT MAX(s.captured_at) AS t FROM repo_snapshots s JOIN repos r ON r.id = s.repo_id WHERE r.user_id = ?',
+      [userId]
+    ),
+  ]);
   return {
     total_repos: Number(a.c),
     active_queries: Number(b.c),

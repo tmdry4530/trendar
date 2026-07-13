@@ -51,7 +51,8 @@ export function createEtlRunner(deps) {
       let token;
       try {
         token = decryptToken(user.access_token_enc);
-      } catch {
+      } catch (e) {
+        console.error(`[etl] user#${userId} 토큰 복호화 실패:`, e.message);
         await users.setTokenInvalid(userId);
         await users.updateEtlResult(userId, { status: 'token_invalid', message: 'GitHub 토큰 복호화에 실패했습니다.' });
         throw httpError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
@@ -78,6 +79,7 @@ export function createEtlRunner(deps) {
           }
           result.queries_processed++;
         } catch (e) {
+          console.error(`[etl] user#${userId} query#${wq.id} 수집 실패:`, e);
           if (e.status === 401) {
             await users.setTokenInvalid(userId);
             await users.updateEtlResult(userId, { status: 'token_invalid', message: 'GitHub 인증에 실패했습니다 (401).' });
