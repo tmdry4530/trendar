@@ -24,7 +24,7 @@ created: 2026-07-13
   - 요구사항: R2.1, R1.5
   - 완료 조건: `npm test` 통과 (쿠키 없음/무효/만료 → 401, 유효 → `req.user`)
 
-- [ ] **T4. GitHub OAuth 라우트 + 계정 수명주기**
+- [x] **T4. GitHub OAuth 라우트 + 계정 수명주기**
   - 내용: `backend/src/services/github-oauth.js`(내장 fetch로 authorize URL 생성·code 교환·`GET /user` 프로필 조회), `routes/auth.routes.js` + `controllers/auth.controller.js` — `GET /api/auth/github`(state 쿠키+리다이렉트, scope 빈 값), `GET /api/auth/github/callback`(state 검증→토큰 교환→upsert+토큰 암호화 저장+`token_invalid` 해제→세션 발급→`/`), 실패 시 `/login?error=<코드>`, `POST /api/auth/logout`, `GET /api/auth/me`, `DELETE /api/auth/account`. `app.js`에 cookie-parser(신규 의존성)·auth 라우트 마운트, 데이터 라우트에 requireAuth 적용. 프로덕션 필수 env(`GITHUB_CLIENT_ID/SECRET`, `TOKEN_ENCRYPTION_KEY`, `APP_URL`) 부팅 fail-fast.
   - 요구사항: R1.1–R1.6, R3.1, R5.1, R5.2, R6.2
   - 완료 조건: `npm test` 통과(콜백 성공/실패·me·탈퇴 컨트롤러 단위 테스트, 스텁 주입), 기존 테스트 회귀 없음

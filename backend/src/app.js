@@ -2,21 +2,28 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import cors from 'cors';
+import cookieParser from 'cookie-parser';
 import queryRoutes from './routes/query.routes.js';
 import repoRoutes from './routes/repo.routes.js';
 import etlRoutes from './routes/etl.routes.js';
 import statsRoutes from './routes/stats.routes.js';
+import authRoutes from './routes/auth.routes.js';
+import { requireAuth } from './middleware/requireAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 
 const app = express();
 
 app.use(cors({ origin: process.env.CORS_ORIGIN || '*' }));
 app.use(express.json());
+app.use(cookieParser());
 
-app.use('/api/queries', queryRoutes);
-app.use('/api/repos', repoRoutes);
-app.use('/api/etl', etlRoutes);
-app.use('/api', statsRoutes);
+app.get('/api/health', (req, res) => res.json({ ok: true }));
+
+app.use('/api/auth', authRoutes);
+app.use('/api/queries', requireAuth, queryRoutes);
+app.use('/api/repos', requireAuth, repoRoutes);
+app.use('/api/etl', requireAuth, etlRoutes);
+app.use('/api', requireAuth, statsRoutes);
 
 if (process.env.NODE_ENV === 'production') {
   const __dirname = path.dirname(fileURLToPath(import.meta.url));

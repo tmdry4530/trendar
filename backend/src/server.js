@@ -7,6 +7,16 @@ import { initDb } from './db/init.js';
 const PORT = process.env.PORT || 4000;
 
 async function start() {
+  const requiredEnv = ['GITHUB_CLIENT_ID', 'GITHUB_CLIENT_SECRET', 'TOKEN_ENCRYPTION_KEY', 'APP_URL'];
+  const missing = requiredEnv.filter((k) => !process.env[k]);
+  if (missing.length > 0) {
+    if (process.env.NODE_ENV === 'production') {
+      console.error(`필수 환경변수 누락으로 기동 중단: ${missing.join(', ')}`);
+      process.exit(1);
+    }
+    console.warn(`환경변수 경고 — 누락: ${missing.join(', ')} (dev에서는 계속 진행)`);
+  }
+
   const usingUrl = Boolean(process.env.MYSQL_URL || process.env.DATABASE_URL);
   console.log(`DB target: ${usingUrl ? 'MYSQL_URL/DATABASE_URL' : `DB_HOST=${process.env.DB_HOST || '(none)'}`}`);
   for (let attempt = 1; attempt <= 15; attempt++) {
