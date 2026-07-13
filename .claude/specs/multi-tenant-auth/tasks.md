@@ -29,7 +29,7 @@ created: 2026-07-13
   - 요구사항: R1.1–R1.6, R3.1, R5.1, R5.2, R6.2
   - 완료 조건: `npm test` 통과(콜백 성공/실패·me·탈퇴 컨트롤러 단위 테스트, 스텁 주입), 기존 테스트 회귀 없음
 
-- [ ] **T5. 기존 API 전면 user_id 스코프 + 쿼리 상한**
+- [x] **T5. 기존 API 전면 user_id 스코프 + 쿼리 상한**
   - 내용: `query.model.js`·`repo.model.js`·`stats.model.js`(+ 대응 컨트롤러) 전 함수에 `userId` 스코프(`WHERE user_id = ?`), id 단건은 `AND user_id = ?` miss 시 404. `query.model.create`에 `MAX_QUERIES_PER_USER`(기본 10) 상한 → 초과 시 400 `QUERY_LIMIT_EXCEEDED`(수정·삭제는 허용). `backend/test/query-limit.test.js`.
   - 요구사항: R2.2–R2.5, R4.1, R4.2
   - 완료 조건: `npm test` 통과, 모든 SQL에 user_id 조건 포함(diff 리뷰로 전수 확인)
