@@ -111,7 +111,6 @@ export interface LanguageStat {
 
 /** POST /api/etl/run 응답 */
 export interface EtlRunResult {
-  ran_at: string;
   queries_processed: number;
   repos_upserted: number;
   snapshots_inserted: number;
@@ -121,12 +120,10 @@ export interface EtlRunResult {
 
 /** GET /api/etl/status 응답 */
 export interface EtlStatus {
-  last_run_at: string | null;
-  last_result: {
-    queries_processed: number;
-    repos_upserted: number;
-    errors: string[];
-  } | null;
+  last_etl_at: string | null;
+  last_etl_status: 'ok' | 'error' | 'token_invalid' | null;
+  last_etl_message: string | null;
+  running: boolean;
   cron: string;
 }
 

@@ -285,7 +285,6 @@ function runEtl(query?: Record<string, unknown>): EtlRunResult {
   lastEtlAt = ranAt;
   const queriesProcessed = queryId ? 1 : queries.filter((q) => q.is_active).length;
   return {
-    ran_at: ranAt,
     queries_processed: queriesProcessed,
     repos_upserted: targets.length,
     snapshots_inserted: snapsInserted,
@@ -295,10 +294,10 @@ function runEtl(query?: Record<string, unknown>): EtlRunResult {
 }
 function etlStatus(): EtlStatus {
   return {
-    last_run_at: lastEtlAt,
-    last_result: lastEtlAt
-      ? { queries_processed: queries.filter((q) => q.is_active).length, repos_upserted: repos.length, errors: [] }
-      : null,
+    last_etl_at: lastEtlAt,
+    last_etl_status: lastEtlAt ? 'ok' : null,
+    last_etl_message: lastEtlAt ? `쿼리 ${queries.filter((q) => q.is_active).length}건 수집` : null,
+    running: false,
     cron: '0 */6 * * *',
   };
 }
