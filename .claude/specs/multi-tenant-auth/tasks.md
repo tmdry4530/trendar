@@ -9,7 +9,7 @@ created: 2026-07-13
 > 체크박스가 실행 상태의 단일 진실 공급원이다. 태스크 완료 = 완료 조건 + 연결된 인수 조건 충족 + 관련 테스트 통과.
 > 실행 환경 제약: 로컬에 MySQL/Docker 없음 → DB 결합 검증은 스텁 주입 단위 테스트로, 실 DB·실 OAuth 검증은 배포 후 수동 E2E 체크리스트로 수행.
 
-- [ ] **T1. 백엔드 테스트 인프라 + 암호화 유틸**
+- [x] **T1. 백엔드 테스트 인프라 + 암호화 유틸**
   - 내용: `backend/package.json`에 `"test": "node --test test/"` 추가. `backend/src/utils/crypto.js` 신규 — `encryptToken`/`decryptToken`(AES-256-GCM, env `TOKEN_ENCRYPTION_KEY` 64자 hex), `newSessionToken`/`hashSessionToken`(SHA-256). `backend/test/crypto.test.js` — 라운드트립, 변조 거부, 키 미설정 throw.
   - 요구사항: R3.1
   - 완료 조건: `cd backend && npm test` 통과
