@@ -44,7 +44,7 @@ created: 2026-07-13
   - 요구사항: R1.1, R1.2(리다이렉트 수신), R1.3, R1.5
   - 완료 조건: `cd frontend && npm run build` 통과, mock 모드로 가드·로그인 화면 수동 확인
 
-- [ ] **T8. 프론트 사용자 메뉴 + 탈퇴 + 토큰 무효 배너**
+- [x] **T8. 프론트 사용자 메뉴 + 탈퇴 + 토큰 무효 배너**
   - 내용: `TopNav.tsx`에 아바타·login명·메뉴(로그아웃, 계정 삭제 — "모든 데이터가 영구 삭제됩니다" 확인 모달 후 `DELETE /api/auth/account`→`/login`). `tokenInvalid`면 전 화면 상단 재로그인 안내 배너(재로그인 링크 = `/api/auth/github`).
   - 요구사항: R1.7, R5.3, R3.4
   - 완료 조건: `npm run build` 통과, mock 모드 수동 확인

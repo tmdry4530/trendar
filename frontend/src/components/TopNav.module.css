@@ -71,7 +71,88 @@
 }
 .statusText { padding-top: 1px; }
 
+.userMenu {
+  position: relative;
+  margin-left: 14px;
+}
+.userTrigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid transparent;
+  background: transparent;
+  border-radius: var(--radius-pill);
+  padding: 4px 10px 4px 4px;
+  transition: border-color 0.15s var(--ease), background 0.15s var(--ease);
+}
+.userTrigger:hover { background: var(--surface-2); border-color: var(--line); }
+.avatar {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--line);
+}
+.avatarFallback {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-family: var(--mono);
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid var(--accent-dim);
+}
+.userName {
+  font-family: var(--mono);
+  font-size: 13px;
+  color: var(--text);
+  max-width: 120px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dropdown {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  min-width: 160px;
+  background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 6px;
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.5);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  animation: dropdown-in 0.14s var(--ease) both;
+}
+.dropdownItem {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  color: var(--text);
+  background: transparent;
+  border: none;
+}
+.dropdownItem:hover { background: var(--surface-2); }
+.dropdownDanger { color: var(--danger); }
+.dropdownDanger:hover { background: var(--danger-soft); }
+
+@keyframes dropdown-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 @media (max-width: 640px) {
   .tagline { display: none; }
   .inner { gap: 12px; padding: 0 14px; }
+  .userName { display: none; }
 }

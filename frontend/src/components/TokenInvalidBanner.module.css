@@ -1,0 +1,24 @@
+.banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  background: rgba(224, 164, 88, 0.1);
+  border-bottom: 1px solid rgba(224, 164, 88, 0.32);
+  padding: 10px 20px;
+}
+.text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--down);
+}
+.action {
+  border-color: var(--down);
+  color: var(--down);
+  background: rgba(224, 164, 88, 0.14);
+}
+.action:hover {
+  background: rgba(224, 164, 88, 0.22);
+  border-color: var(--down);
+}
