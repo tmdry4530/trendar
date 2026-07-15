@@ -377,7 +377,7 @@ export default function QueriesPage() {
 
           {!loading && !error && data !== null && data.length > 0 && (
             <div className={styles.tableWrap}>
-              <table className="table table--rows">
+              <table className="table table--rows table--center">
                 <thead>
                   <tr>
                     <th>Query</th>
@@ -386,8 +386,8 @@ export default function QueriesPage() {
                       <Help text="keyword: 이름·설명·README에서 단어 검색 · topic: GitHub 토픽 태그로 검색" label="Type 설명" />
                     </th>
                     <th>상태</th>
-                    <th className="col-num">Repos</th>
-                    <th className="col-num">등록일</th>
+                    <th>Repos</th>
+                    <th>등록일</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -399,10 +399,10 @@ export default function QueriesPage() {
                       </td>
                       <td>{renderTypeCell(row)}</td>
                       <td>{renderStatusCell(row)}</td>
-                      <td className="col-num">
+                      <td>
                         <span className="num">{formatInt(row.repo_count)}</span>
                       </td>
-                      <td className="col-num">
+                      <td>
                         <span className="num muted">
                           {formatDate(row.created_at)}
                         </span>
