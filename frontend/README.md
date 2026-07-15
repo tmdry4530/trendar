@@ -1,6 +1,6 @@
-# frontend/ — AgentRadar Frontend
+# frontend/ — Trendar Frontend
 
-AgentRadar 대시보드의 **React + Vite + TypeScript** 단일 페이지 앱(SPA). Express REST API(`http://localhost:4000/api`)를 소비한다. 설계 지침은 `../CLAUDE.md`, API 계약은 `../docs/API.md`.
+Trendar 대시보드의 **React + Vite + TypeScript** 단일 페이지 앱(SPA). Express REST API(`http://localhost:4000/api`)를 소비한다. 설계 지침은 `../CLAUDE.md`, API 계약은 `../docs/API.md`.
 
 ## 실행
 

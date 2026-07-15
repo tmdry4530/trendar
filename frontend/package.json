@@ -1,9 +1,9 @@
 {
-  "name": "agent-radar-frontend",
+  "name": "trendar-frontend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "AgentRadar frontend — React + Vite + TS dashboard for the AgentRadar REST API",
+  "description": "Trendar frontend — React + Vite + TS dashboard for the Trendar REST API",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit && vite build",

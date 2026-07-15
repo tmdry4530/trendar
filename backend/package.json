@@ -1,9 +1,9 @@
 {
-  "name": "agent-radar-backend",
+  "name": "trendar-backend",
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "AgentRadar backend — Express REST API + GitHub ETL",
+  "description": "Trendar backend — Express REST API + GitHub ETL",
   "scripts": {
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",

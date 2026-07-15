@@ -42,7 +42,7 @@ export async function fetchGithubUser(accessToken) {
   const res = await fetch(USER_URL, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
-      'User-Agent': 'AgentRadar',
+      'User-Agent': 'Trendar',
       Accept: 'application/vnd.github+json',
     },
   });

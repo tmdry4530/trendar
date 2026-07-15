@@ -19,7 +19,7 @@ export default function LoginPage() {
       <div className={`panel ${styles.card}`}>
         <div className={styles.brand}>
           <span className={styles.logo}>◎</span>
-          <span className={styles.brandName}>AgentRadar</span>
+          <span className={styles.brandName}>Trendar</span>
         </div>
         <p className={styles.tagline}>AI 에이전트 스킬·툴 GitHub 트렌드 모니터</p>
 

@@ -1,8 +1,8 @@
-CREATE DATABASE IF NOT EXISTS agent_radar
+CREATE DATABASE IF NOT EXISTS trendar
   CHARACTER SET utf8mb4
   COLLATE utf8mb4_unicode_ci;
 
-USE agent_radar;
+USE trendar;
 
 DROP TABLE IF EXISTS repo_snapshots;
 DROP TABLE IF EXISTS repos;

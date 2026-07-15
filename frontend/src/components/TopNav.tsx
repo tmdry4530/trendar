@@ -55,8 +55,8 @@ export default function TopNav() {
         <div className={styles.inner}>
           <NavLink to="/" className={styles.brand}>
             <span className={styles.logo}>◎</span>
-            <span className={styles.brandName}>AgentRadar</span>
-            <span className={styles.tagline}>// agent ecosystem radar</span>
+            <span className={styles.brandName}>Trendar</span>
+            <span className={styles.tagline}>// github trend radar</span>
           </NavLink>
 
           <nav className={styles.links}>

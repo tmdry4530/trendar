@@ -22,7 +22,7 @@ async function start() {
   for (let attempt = 1; attempt <= 15; attempt++) {
     try {
       await initDb();
-      app.listen(PORT, () => console.log(`AgentRadar API listening on :${PORT}`));
+      app.listen(PORT, () => console.log(`Trendar API listening on :${PORT}`));
       return;
     } catch (e) {
       console.error(`DB init attempt ${attempt}/15 failed: code=${e.code || '-'} errno=${e.errno || '-'} msg=${e.message || '(empty)'}`);
