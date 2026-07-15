@@ -18,7 +18,7 @@ created: 2026-07-15
   - 요구사항: R1.1, R1.4, R1.7, R3.2
   - 완료 조건: `node -c` 전 파일 통과, 마이그레이션이 컬럼 있을 때 no-op임을 코드로 확인, SQL이 design §4 문장과 일치
 
-- [ ] **T3. etl.controller DI 팩토리화 + 429/환불 + status 확장 + 테스트**
+- [x] **T3. etl.controller DI 팩토리화 + 429/환불 + status 확장 + 테스트**
   - 내용: `createEtlController({ pipeline, users, quota })` 전환. `run`: 소비 실패 → 429 `ETL_DAILY_LIMIT_EXCEEDED`(한도·리셋 안내 메시지), pipeline의 `ETL_ALREADY_RUNNING`/`GITHUB_TOKEN_INVALID` → 환불 후 rethrow, 그 외 에러는 환불 없음. `status`: `manual_used_today/limit/remaining/reset_at` 추가. `test/etl-quota.test.js` (design §6의 5개 시나리오)
   - 요구사항: R1.1, R1.2, R1.4, R1.5, R3.1, R3.2
   - 완료 조건: 신규 테스트 전부 통과 + 기존 테스트 무회귀
