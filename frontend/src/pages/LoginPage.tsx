@@ -21,7 +21,7 @@ export default function LoginPage() {
           <span className={styles.logo}>◎</span>
           <span className={styles.brandName}>Trendar</span>
         </div>
-        <p className={styles.tagline}>AI 에이전트 스킬·툴 GitHub 트렌드 모니터</p>
+        <p className={styles.tagline}>지금 뜨는 GitHub 레포를 포착하는 트렌드 레이더</p>
 
         {errorMessage && <div className={styles.errorBanner}>{errorMessage}</div>}
 
