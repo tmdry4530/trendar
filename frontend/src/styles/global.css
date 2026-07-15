@@ -209,6 +209,8 @@ input, select, textarea { font: inherit; color: inherit; }
 .table--rows tbody tr:hover { background: var(--surface-2); }
 .table--rows tbody tr { cursor: pointer; }
 .col-num { text-align: right; font-family: var(--mono); font-variant-numeric: tabular-nums; white-space: nowrap; }
+/* 헤더도 값과 같은 오른쪽 정렬로 (`.table th`의 left 정렬보다 우선) */
+.table th.col-num { text-align: right; }
 
 /* ── pills / badges / tags ─────────────────────────────────────────────── */
 .pill {

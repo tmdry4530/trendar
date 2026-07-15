@@ -41,6 +41,7 @@
   align-items: center;
   gap: 4px;
   margin-left: 8px;
+  margin-right: auto; /* 이후 요소(계정·mock 배지)를 오른쪽 끝으로 밀어냄 */
 }
 .link {
   font-family: var(--mono);
@@ -59,7 +60,6 @@
   border-color: var(--accent-dim);
 }
 .status {
-  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 7px;
