@@ -12,6 +12,14 @@ import { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot } from './
 const MIN_STARS = Number(process.env.ETL_MIN_STARS) || 0;
 const TOKEN_INVALID_MESSAGE = 'GitHub 연결이 유효하지 않습니다. 다시 로그인해 주세요.';
 
+// 수집 루프에 진입하기 전(=아직 아무 작업도 하지 않은) 거부임을 표시한다.
+// 컨트롤러는 이 플래그를 보고서만 일일 한도를 환불한다 — 루프 도중 실패는 환불하지 않는다.
+function preflightError(status, code, message) {
+  const e = httpError(status, code, message);
+  e.refundable = true;
+  return e;
+}
+
 async function defaultQueryFn(userId, queryId) {
   const [rows] = queryId
     ? await pool.query('SELECT * FROM watch_queries WHERE id=? AND user_id=?', [queryId, userId])
@@ -39,13 +47,13 @@ export function createEtlRunner(deps) {
 
   async function runPipelineForUser(userId, { queryId } = {}) {
     if (running.has(userId)) {
-      throw httpError(409, 'ETL_ALREADY_RUNNING', '이미 수집이 진행 중입니다.');
+      throw preflightError(409, 'ETL_ALREADY_RUNNING', '이미 수집이 진행 중입니다.');
     }
     running.add(userId);
     try {
       const user = await users.findById(userId);
       if (!user || !user.access_token_enc || user.token_invalid) {
-        throw httpError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
+        throw preflightError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
       }
 
       let token;
@@ -55,7 +63,7 @@ export function createEtlRunner(deps) {
         console.error(`[etl] user#${userId} 토큰 복호화 실패:`, e.message);
         await users.setTokenInvalid(userId);
         await users.updateEtlResult(userId, { status: 'token_invalid', message: 'GitHub 토큰 복호화에 실패했습니다.' });
-        throw httpError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
+        throw preflightError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
       }
 
       const octokit = createOctokit(token);

@@ -62,10 +62,17 @@ test('run — 한도 도달이면 429 + 파이프라인 미호출 (R1.2)', async
   assert.equal(calls.run.length, 0);
 });
 
+// 파이프라인의 preflightError를 흉내 — 작업 전 거부는 refundable 플래그가 붙는다.
+function preflight(code) {
+  const e = httpError(409, code, 'blocked');
+  e.refundable = true;
+  return e;
+}
+
 for (const code of ['ETL_ALREADY_RUNNING', 'GITHUB_TOKEN_INVALID']) {
   test(`run — 시작 전 거부(${code})는 환불 후 에러 그대로 (R1.4)`, async () => {
     const { deps, calls } = makeDeps();
-    deps.pipeline.runPipelineForUser = async () => { throw httpError(409, code, 'blocked'); };
+    deps.pipeline.runPipelineForUser = async () => { throw preflight(code); };
     const c = createEtlController(deps);
     let err;
     await c.run(req, makeRes(), (e) => { err = e; });
@@ -75,6 +82,19 @@ for (const code of ['ETL_ALREADY_RUNNING', 'GITHUB_TOKEN_INVALID']) {
   });
 }
 
+test('run — 루프 도중 401(GITHUB_TOKEN_INVALID, refundable 아님)은 환불하지 않음 (R1.4)', async () => {
+  // 앞선 쿼리에서 이미 수집 작업을 한 뒤 토큰이 죽은 경우: 자원을 썼으므로 환불 금지.
+  const { deps, calls } = makeDeps();
+  deps.pipeline.runPipelineForUser = async () => {
+    throw httpError(409, 'GITHUB_TOKEN_INVALID', 'mid-run token death'); // refundable 없음
+  };
+  const c = createEtlController(deps);
+  let err;
+  await c.run(req, makeRes(), (e) => { err = e; });
+  assert.equal(err.code, 'GITHUB_TOKEN_INVALID');
+  assert.equal(calls.refund.length, 0);
+});
+
 test('run — 실행 도중 일반 에러는 환불하지 않음', async () => {
   const { deps, calls } = makeDeps();
   deps.pipeline.runPipelineForUser = async () => { throw new Error('mid-run failure'); };
@@ -83,6 +103,16 @@ test('run — 실행 도중 일반 에러는 환불하지 않음', async () => {
   await c.run(req, makeRes(), (e) => { err = e; });
   assert.equal(err.message, 'mid-run failure');
   assert.equal(calls.refund.length, 0);
+});
+
+test('run — 환불 자체가 실패해도 원래 에러를 전달한다', async () => {
+  const { deps } = makeDeps();
+  deps.pipeline.runPipelineForUser = async () => { throw preflight('ETL_ALREADY_RUNNING'); };
+  deps.users.refundManualEtl = async () => { throw new Error('refund DB down'); };
+  const c = createEtlController(deps);
+  let err;
+  await c.run(req, makeRes(), (e) => { err = e; });
+  assert.equal(err.code, 'ETL_ALREADY_RUNNING'); // refund 실패에 덮이지 않음
 });
 
 test('status — manual_* 4필드 포함, 잔여는 한도-사용 (R3.1)', async () => {

@@ -5,9 +5,6 @@ import { httpError } from '../middleware/errorHandler.js';
 import { maxManualEtlPerDay } from '../utils/limits.js';
 import { kstToday, kstNextMidnight } from '../utils/kst.js';
 
-// 시작 전 거부 — 자원을 쓰지 않았으므로 소비한 횟수를 되돌린다 (R1.4)
-const REFUNDABLE_CODES = new Set(['ETL_ALREADY_RUNNING', 'GITHUB_TOKEN_INVALID']);
-
 export function createEtlController(deps) {
   const { pipeline, users, limit, clock } = deps;
 
@@ -28,7 +25,13 @@ export function createEtlController(deps) {
       try {
         result = await pipeline.runPipelineForUser(req.user.id, { queryId });
       } catch (e) {
-        if (REFUNDABLE_CODES.has(e.code)) await users.refundManualEtl(req.user.id, today);
+        // 수집 루프에 진입하기 전(작업 전) 거부만 환불한다. 루프 도중 실패는
+        // 이미 자원을 소비했으므로 환불하지 않는다 (R1.4). 환불 자체가 실패해도
+        // 원래 에러를 그대로 사용자에게 전달한다.
+        if (e.refundable) {
+          try { await users.refundManualEtl(req.user.id, today); }
+          catch (refundErr) { console.error(`[etl] user#${req.user.id} 한도 환불 실패:`, refundErr.message); }
+        }
         throw e;
       }
       res.json({ ok: true, data: result });
