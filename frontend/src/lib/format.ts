@@ -53,6 +53,23 @@ export function formatRelativeTime(iso: string | null | undefined): string {
   return new Date(iso).toLocaleDateString('ko-KR');
 }
 
+/** ISO -> 컴팩트 경과시간 "15 min" / "3 hr" / "2 d" (스탯 타일용) */
+export function formatCompactAge(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const then = new Date(iso).getTime();
+  if (Number.isNaN(then)) return '—';
+  const diff = Date.now() - then;
+  if (diff < 0) return 'just now';
+  const sec = Math.round(diff / 1000);
+  if (sec < 60) return 'just now';
+  const min = Math.round(sec / 60);
+  if (min < 60) return `${min} min`;
+  const hr = Math.round(min / 60);
+  if (hr < 24) return `${hr} hr`;
+  const day = Math.round(hr / 24);
+  return `${day} d`;
+}
+
 /** ISO -> "2026. 6. 6. 오후 3:00" */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';

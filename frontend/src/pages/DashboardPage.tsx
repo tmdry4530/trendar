@@ -1,7 +1,7 @@
 // DashboardPage.tsx — 대시보드: 통계 카드 4개 + Top Movers 테이블 + 언어 분포 바
 import { useAsync } from '../lib/useAsync';
 import { getStats, getTrends, getLanguages } from '../api/stats';
-import { formatRelativeTime, formatInt } from '../lib/format';
+import { formatCompactAge, formatInt } from '../lib/format';
 import { LoadingState, ErrorState } from '../components/States';
 import StatCard from '../components/StatCard';
 import TrendTable from '../components/TrendTable';
@@ -49,8 +49,8 @@ export default function DashboardPage() {
             />
             <StatCard
               label="Last ETL"
-              value={stats.data.last_etl_at ? formatRelativeTime(stats.data.last_etl_at) : '—'}
-              hint={stats.data.last_etl_at ? '마지막 수집' : '아직 없음'}
+              value={stats.data.last_etl_at ? formatCompactAge(stats.data.last_etl_at) : '—'}
+              hint={stats.data.last_etl_at ? '전 · 마지막 수집' : '아직 없음'}
               accent
             />
           </>
