@@ -1,0 +1,100 @@
+// Trendar DB 스키마 (DBML) — dbdiagram.io에 붙여넣으면 ERD 시각화 가능
+// 실행 DDL은 schema.sql 참조. 두 파일은 항상 동기화할 것.
+
+Table users {
+  id                int      [pk, increment]
+  github_id         bigint   [not null, unique]
+  login             varchar(100) [not null]
+  name              varchar(200)
+  avatar_url        varchar(500)
+  access_token_enc  text     [note: 'GitHub OAuth 토큰 — AES-256-GCM 암호문 (iv:tag:cipher)']
+  token_invalid     boolean  [not null, default: false]
+  last_etl_at       datetime
+  last_etl_status   etl_status
+  last_etl_message  varchar(500)
+  created_at        timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+enum etl_status {
+  ok
+  error
+  token_invalid
+}
+
+Table sessions {
+  id          int       [pk, increment]
+  user_id     int       [not null]
+  token_hash  char(64)  [not null, unique, note: '세션 토큰의 sha256 — 원문은 httpOnly 쿠키에만 존재']
+  expires_at  datetime  [not null]
+  created_at  timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    expires_at [name: 'idx_expires']
+  }
+}
+
+Table watch_queries {
+  id          int          [pk, increment]
+  user_id     int          [not null]
+  query       varchar(200) [not null]
+  query_type  query_type   [not null, default: 'keyword']
+  is_active   boolean      [not null, default: true]
+  created_at  timestamp    [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (user_id, query, query_type) [unique, name: 'uq_user_query']
+  }
+}
+
+enum query_type {
+  topic
+  keyword
+}
+
+Table repos {
+  id             int          [pk, increment]
+  user_id        int          [not null]
+  github_id      bigint       [not null]
+  query_id       int          [not null]
+  full_name      varchar(255) [not null]
+  owner          varchar(120)
+  name           varchar(160)
+  html_url       varchar(255)
+  description    text
+  language       varchar(50)
+  stars          int          [default: 0]
+  star_delta     int          [default: 0]
+  growth_rate    double       [default: 0]
+  note           text
+  is_bookmarked  boolean      [not null, default: false]
+  first_seen_at  timestamp    [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at     timestamp    [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (user_id, github_id) [unique, name: 'uq_user_github']
+    query_id             [name: 'idx_query']
+    stars                [name: 'idx_stars']
+    growth_rate          [name: 'idx_growth', note: 'trends 정렬용']
+  }
+}
+
+Table repo_snapshots {
+  id           int       [pk, increment]
+  repo_id      int       [not null]
+  stars        int
+  forks        int
+  open_issues  int
+  watchers     int
+  captured_at  timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (repo_id, captured_at) [name: 'idx_repo_time']
+  }
+}
+
+// 관계 — 전부 ON DELETE CASCADE: users 삭제 한 번으로 전체 데이터 연쇄 삭제(탈퇴)
+Ref: sessions.user_id > users.id [delete: cascade]
+Ref: watch_queries.user_id > users.id [delete: cascade]
+Ref: repos.user_id > users.id [delete: cascade]
+Ref: repos.query_id > watch_queries.id [delete: cascade]
+Ref: repo_snapshots.repo_id > repos.id [delete: cascade]
