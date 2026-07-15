@@ -9,6 +9,7 @@ import { useToast } from '../components/Toast';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 import ConfirmDialog from '../components/ConfirmDialog';
 import RepoRow from '../components/RepoRow';
+import Help from '../components/Help';
 import type { Repo, RepoQueryParams, RepoSort, RepoListResult } from '../types';
 import styles from './ReposPage.module.css';
 
@@ -148,17 +149,15 @@ export default function ReposPage() {
 
       {/* toolbar */}
       <div className={`panel ${styles.toolbar}`}>
-        <div className="row wrap">
-          {/* search */}
-          <input
-            className={`input ${styles.searchInput}`}
-            type="search"
-            placeholder="레포명 / 설명 검색…"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            aria-label="레포 검색"
-          />
-
+        <input
+          className={`input ${styles.searchInput}`}
+          type="search"
+          placeholder="레포명 / 설명 검색…"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          aria-label="레포 검색"
+        />
+        <div className={styles.filterRow}>
           {/* query filter */}
           <select
             className={`select ${styles.filterSelect}`}
@@ -166,7 +165,7 @@ export default function ReposPage() {
             onChange={(e) => setQueryId(e.target.value ? Number(e.target.value) : undefined)}
             aria-label="조건 필터"
           >
-            <option value="">전체</option>
+            <option value="">전체 조건</option>
             {queriesData?.map((q) => (
               <option key={q.id} value={q.id}>
                 {q.query}
@@ -212,8 +211,14 @@ export default function ReposPage() {
               />
             ) : (
               <EmptyState
-                title="수집된 레포가 없습니다"
-                hint="Queries에서 조건을 추가하고 ETL을 실행하세요"
+                title="아직 수집된 레포가 없습니다"
+                hint={
+                  <>
+                    Queries에서 관심 키워드를 등록하고 수집을 실행하면 여기에 급상승 레포가 쌓입니다.
+                    <br />
+                    1. 조건 추가 → 2. ‘실행(▶)’으로 수집 → 3. 이 화면에서 확인
+                  </>
+                }
                 action={
                   <Link className="btn btn--sm btn--primary" to="/queries">
                     조건 관리로
@@ -230,7 +235,10 @@ export default function ReposPage() {
                     <th>Repo / Description</th>
                     <th>Lang</th>
                     <th className="col-num">Stars</th>
-                    <th className="col-num">Δ 성장</th>
+                    <th className="col-num">
+                      Δ 성장{' '}
+                      <Help text="직전 수집 대비 스타 증가량·증가율. 지금 얼마나 빠르게 뜨는지를 나타냅니다." label="성장 설명" />
+                    </th>
                     <th aria-label="삭제" />
                   </tr>
                 </thead>

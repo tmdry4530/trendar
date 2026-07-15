@@ -70,6 +70,14 @@ export function formatCompactAge(iso: string | null | undefined): string {
   return `${day} d`;
 }
 
+/** ISO -> "2026. 07. 14." (날짜만) */
+export function formatDate(iso: string | null | undefined): string {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '—';
+  return d.toLocaleDateString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit' });
+}
+
 /** ISO -> "2026. 6. 6. 오후 3:00" */
 export function formatDateTime(iso: string | null | undefined): string {
   if (!iso) return '—';

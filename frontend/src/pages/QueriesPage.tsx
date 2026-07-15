@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { listQueries, updateQuery, deleteQuery } from '../api/queries';
 import { runEtl, getEtlStatus } from '../api/stats';
 import { useAsync } from '../lib/useAsync';
-import { formatInt, formatRelativeTime } from '../lib/format';
+import { formatInt, formatDate } from '../lib/format';
 import { useToast } from '../components/Toast';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryForm from '../components/QueryForm';
+import Help from '../components/Help';
 import type { WatchQuery, QueryType, EtlStatus } from '../types';
 import styles from './QueriesPage.module.css';
 
@@ -216,13 +217,31 @@ export default function QueriesPage() {
       return null;
     }
     return (
-      <span
-        className={
-          row.query_type === 'topic' ? 'pill pill--accent' : 'pill'
-        }
-      >
+      <span className={`pill ${row.query_type === 'topic' ? 'pill--topic' : 'pill--keyword'}`}>
         {row.query_type}
       </span>
+    );
+  }
+
+  function renderStatusCell(row: WatchQuery) {
+    if (editState?.id === row.id) return null;
+    const isToggling = togglingIds.has(row.id);
+    return (
+      <button
+        type="button"
+        className={`${styles.statusToggle}${row.is_active ? ` ${styles.statusOn}` : ''}`}
+        onClick={() => handleToggleActive(row)}
+        disabled={isToggling}
+        title={row.is_active ? '클릭해 비활성화' : '클릭해 활성화'}
+        aria-pressed={row.is_active}
+      >
+        {isToggling ? (
+          <span className="spinner" style={{ width: 10, height: 10 }} />
+        ) : (
+          <span className={row.is_active ? 'dot' : 'dot dot--off'} />
+        )}
+        {row.is_active ? '활성' : '비활성'}
+      </button>
     );
   }
 
@@ -230,7 +249,6 @@ export default function QueriesPage() {
     const isEditing = editState?.id === row.id;
     const isSaving = editState?.id === row.id && editState.saving;
     const isRowEtlRunning = rowEtlId === row.id;
-    const isToggling = togglingIds.has(row.id);
 
     if (isEditing) {
       return (
@@ -258,22 +276,6 @@ export default function QueriesPage() {
 
     return (
       <div className={styles.actionsGap}>
-        {/* Active toggle */}
-        <button
-          type="button"
-          className={`btn btn--sm${row.is_active ? ' btn--active' : ''}`}
-          onClick={() => handleToggleActive(row)}
-          disabled={isToggling}
-          title={row.is_active ? '비활성화' : '활성화'}
-          aria-label={row.is_active ? '활성 — 클릭해 비활성화' : '비활성 — 클릭해 활성화'}
-        >
-          {isToggling ? (
-            <span className="spinner" style={{ width: 10, height: 10 }} />
-          ) : (
-            <span className={row.is_active ? 'dot' : 'dot dot--off'} />
-          )}
-        </button>
-
         {/* Edit */}
         <button
           type="button"
@@ -323,6 +325,10 @@ export default function QueriesPage() {
       <div className={styles.headerRow}>
         <div className={`page__title ${styles.title}`}>QUERIES</div>
         <div className={styles.etlControls}>
+          <Help
+            text="지금 바로 수집을 실행해 최신 스타 수를 반영합니다. 활성 조건은 6시간마다 자동으로도 수집돼요. (수동 실행은 하루 한도가 있습니다)"
+            label="수집(ETL) 설명"
+          />
           {etl !== null && (
             <span
               className={quotaExhausted ? 'pill pill--accent' : 'pill'}
@@ -358,8 +364,14 @@ export default function QueriesPage() {
 
           {!loading && !error && data !== null && data.length === 0 && (
             <EmptyState
-              title="추적 중인 조건이 없습니다"
-              hint="위에서 첫 조건을 추가하세요"
+              title="추적할 키워드를 등록해 보세요"
+              hint={
+                <>
+                  관심 키워드를 등록하면 6시간마다 스타 증가율을 추적해 급상승 레포를 찾아줍니다.
+                  <br />
+                  1. 위에서 조건 추가 → 2. ‘실행(▶)’으로 즉시 수집 → 3. Repos·Dashboard에서 확인
+                </>
+              }
             />
           )}
 
@@ -369,9 +381,13 @@ export default function QueriesPage() {
                 <thead>
                   <tr>
                     <th>Query</th>
-                    <th>Type</th>
+                    <th>
+                      Type{' '}
+                      <Help text="keyword: 이름·설명·README에서 단어 검색 · topic: GitHub 토픽 태그로 검색" label="Type 설명" />
+                    </th>
+                    <th>상태</th>
                     <th className="col-num">Repos</th>
-                    <th className="col-num">추가</th>
+                    <th className="col-num">등록일</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -382,12 +398,13 @@ export default function QueriesPage() {
                         {renderQueryCell(row)}
                       </td>
                       <td>{renderTypeCell(row)}</td>
+                      <td>{renderStatusCell(row)}</td>
                       <td className="col-num">
                         <span className="num">{formatInt(row.repo_count)}</span>
                       </td>
                       <td className="col-num">
                         <span className="num muted">
-                          {formatRelativeTime(row.created_at)}
+                          {formatDate(row.created_at)}
                         </span>
                       </td>
                       <td className={styles.actionsCell}>

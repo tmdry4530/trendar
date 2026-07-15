@@ -2,16 +2,25 @@
 
 .toolbar {
   margin-bottom: var(--gap);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 .searchInput {
-  flex: 2;
-  min-width: 180px;
+  width: 100%;
+}
+
+.filterRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
 }
 
 .filterSelect {
-  flex: 1;
-  min-width: 120px;
+  flex: 0 1 200px;
+  min-width: 140px;
 }
 
 .tableWrap {

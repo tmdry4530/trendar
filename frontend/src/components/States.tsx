@@ -18,7 +18,7 @@ export function EmptyState({
   icon = '∅',
 }: {
   title: string;
-  hint?: string;
+  hint?: ReactNode;
   action?: ReactNode;
   icon?: ReactNode;
 }) {

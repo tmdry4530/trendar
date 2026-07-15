@@ -43,6 +43,24 @@
   flex: 0 0 110px;
 }
 
+.statusToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 4px 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--faint);
+  font-family: var(--mono);
+  font-size: 11px;
+  cursor: pointer;
+  transition: color 0.12s var(--ease), border-color 0.12s var(--ease);
+}
+.statusToggle:hover:not(:disabled) { border-color: var(--surface-3); }
+.statusToggle:disabled { opacity: 0.6; cursor: default; }
+.statusOn { color: var(--accent); border-color: var(--accent-dim); }
+
 .actionsCell {
   white-space: nowrap;
 }

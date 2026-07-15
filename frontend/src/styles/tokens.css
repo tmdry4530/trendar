@@ -24,6 +24,12 @@
   --danger: #e0556b;
   --danger-soft: rgba(224, 85, 107, 0.12);
 
+  /* category (query type) — 상태색(초록)과 분리해 활성/비활성 오인 방지 */
+  --cat-keyword: #6ea8fe;
+  --cat-keyword-soft: rgba(110, 168, 254, 0.12);
+  --cat-topic: #b58cff;
+  --cat-topic-soft: rgba(181, 140, 255, 0.12);
+
   /* glows */
   --glow-up: 0 0 14px rgba(61, 220, 132, 0.30);
   --glow-soft: 0 0 0 1px rgba(61, 220, 132, 0.25);

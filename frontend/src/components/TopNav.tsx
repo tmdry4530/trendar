@@ -71,10 +71,12 @@ export default function TopNav() {
             </NavLink>
           </nav>
 
-          <div className={styles.status} title={USE_MOCK ? '목 데이터 모드' : '실시간 API'}>
-            <span className={`dot ${USE_MOCK ? 'dot--off' : ''}`} />
-            <span className={styles.statusText}>{USE_MOCK ? 'mock' : 'live'}</span>
-          </div>
+          {USE_MOCK && (
+            <div className={styles.status} title="목 데이터 모드">
+              <span className="dot dot--off" />
+              <span className={styles.statusText}>mock</span>
+            </div>
+          )}
 
           {me && (
             <div className={styles.userMenu} ref={menuRef}>

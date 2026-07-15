@@ -225,6 +225,9 @@ input, select, textarea { font: inherit; color: inherit; }
   white-space: nowrap;
 }
 .pill--accent { border-color: var(--accent-dim); color: var(--accent); background: var(--accent-soft); }
+/* query type — 카테고리 색(상태색과 분리). 동등한 채도라 어느 쪽도 '꺼짐'으로 안 읽힘 */
+.pill--keyword { border-color: rgba(110, 168, 254, 0.35); color: var(--cat-keyword); background: var(--cat-keyword-soft); }
+.pill--topic   { border-color: rgba(181, 140, 255, 0.35); color: var(--cat-topic);   background: var(--cat-topic-soft); }
 .badge {
   display: inline-flex;
   align-items: center;
