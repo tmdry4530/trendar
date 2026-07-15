@@ -2,11 +2,18 @@
 import { httpError } from '../middleware/errorHandler.js';
 
 const DEFAULT_MAX_QUERIES_PER_USER = 10;
+const DEFAULT_MAX_MANUAL_ETL_PER_DAY = 10;
 
 export function maxQueriesPerUser() {
   const raw = process.env.MAX_QUERIES_PER_USER;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_MAX_QUERIES_PER_USER;
+  return parsed;
+}
+
+export function maxManualEtlPerDay() {
+  const parsed = Number(process.env.MAX_MANUAL_ETL_PER_DAY);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_MAX_MANUAL_ETL_PER_DAY;
   return parsed;
 }
 

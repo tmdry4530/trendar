@@ -8,7 +8,7 @@ created: 2026-07-15
 
 > 체크박스가 실행 상태의 단일 진실 공급원이다. 태스크 완료 = 완료 조건 + 연결된 인수 조건 충족 + 관련 테스트 통과.
 
-- [ ] **T1. KST 날짜 유틸 + 한도 상수 + 테스트**
+- [x] **T1. KST 날짜 유틸 + 한도 상수 + 테스트**
   - 내용: `utils/kst.js` 신규 (`kstToday`/`kstNextMidnight`, `now` 주입 가능), `utils/limits.js`에 `maxManualEtlPerDay()` 추가, `test/kst.test.js` (UTC 15:00 = KST 자정 경계 케이스 포함)
   - 요구사항: R1.3, R1.6
   - 완료 조건: `npm test` 통과 (기존 32개 + 신규), 자정 직전/직후 날짜 전환 테스트 존재
