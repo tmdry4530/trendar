@@ -12,6 +12,14 @@ export function createEtlController(deps) {
     const today = kstToday(clock());
     const max = limit();
     try {
+      // 잘못된 query_id는 한도를 소비하기 전에 400으로 막는다 (NaN이 전체 실행으로 새는 것 방지).
+      let queryId;
+      if (req.query.query_id !== undefined && req.query.query_id !== '') {
+        queryId = Number(req.query.query_id);
+        if (!Number.isInteger(queryId) || queryId <= 0) {
+          throw httpError(400, 'VALIDATION_ERROR', 'query_id가 올바르지 않습니다.');
+        }
+      }
       const consumed = await users.consumeManualEtl(req.user.id, today, max);
       if (!consumed) {
         throw httpError(
@@ -20,7 +28,6 @@ export function createEtlController(deps) {
           `오늘의 수동 수집 한도(${max}회)를 모두 사용했습니다. KST 자정에 초기화됩니다.`
         );
       }
-      const queryId = req.query.query_id ? Number(req.query.query_id) : undefined;
       let result;
       try {
         result = await pipeline.runPipelineForUser(req.user.id, { queryId });
@@ -43,10 +50,8 @@ export function createEtlController(deps) {
       const now = clock();
       const today = kstToday(now);
       const max = limit();
-      const [user, used] = await Promise.all([
-        users.findById(req.user.id),
-        users.getManualEtlUsage(req.user.id, today),
-      ]);
+      const user = await users.findById(req.user.id);
+      const used = users.manualUsageFromRow(user, today);
       res.json({ ok: true, data: {
         last_etl_at: user?.last_etl_at ?? null,
         last_etl_status: user?.last_etl_status ?? null,

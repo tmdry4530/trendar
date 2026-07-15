@@ -78,12 +78,9 @@ export async function refundManualEtl(id, today) {
   );
 }
 
-// 오늘 사용 횟수. 저장된 날짜가 today가 아니면 0 (조회에도 리셋 반영).
-export async function getManualEtlUsage(id, today) {
-  const [[row]] = await pool.query(
-    'SELECT manual_etl_date, manual_etl_count FROM users WHERE id = ?',
-    [id]
-  );
+// 사용자 행 + 오늘(KST) 날짜로 수동 수집 사용 횟수를 계산. 저장된 날짜가 today가
+// 아니면 0 (조회에도 리셋 반영). findById 결과에 이미 두 컬럼이 있어 재조회가 필요 없다.
+export function manualUsageFromRow(row, today) {
   if (!row || !row.manual_etl_date) return 0;
   const stored = row.manual_etl_date instanceof Date
     ? kstDateString(row.manual_etl_date)

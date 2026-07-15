@@ -2,9 +2,15 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createEtlController } from '../src/controllers/etl.controller.js';
 import { httpError } from '../src/middleware/errorHandler.js';
+import { manualUsageFromRow } from '../src/models/user.model.js';
 
 // KST 2026-07-15 낮 시간대 고정
 const NOW = new Date('2026-07-15T03:00:00Z');
+
+function userRow(extra = {}) {
+  return { last_etl_at: null, last_etl_status: null, last_etl_message: null,
+    manual_etl_date: '2026-07-15', manual_etl_count: 3, ...extra };
+}
 
 function makeDeps(overrides = {}) {
   const calls = { consume: [], refund: [], run: [] };
@@ -19,8 +25,8 @@ function makeDeps(overrides = {}) {
     users: {
       consumeManualEtl: async (...args) => { calls.consume.push(args); return true; },
       refundManualEtl: async (...args) => { calls.refund.push(args); },
-      getManualEtlUsage: async () => 3,
-      findById: async () => ({ last_etl_at: null, last_etl_status: null, last_etl_message: null }),
+      manualUsageFromRow, // 실제 로직으로 검증
+      findById: async () => userRow(),
     },
     limit: () => 10,
     clock: () => NOW,
@@ -115,8 +121,10 @@ test('run — 환불 자체가 실패해도 원래 에러를 전달한다', asyn
   assert.equal(err.code, 'ETL_ALREADY_RUNNING'); // refund 실패에 덮이지 않음
 });
 
-test('status — manual_* 4필드 포함, 잔여는 한도-사용 (R3.1)', async () => {
+test('status — manual_* 4필드 포함, 잔여는 한도-사용, users 조회 1회 (R3.1)', async () => {
   const { deps } = makeDeps();
+  let findByIdCalls = 0;
+  deps.users.findById = async () => { findByIdCalls++; return userRow({ manual_etl_count: 3 }); };
   const c = createEtlController(deps);
   const res = makeRes();
   await c.status(req, res, (e) => { throw e; });
@@ -125,11 +133,12 @@ test('status — manual_* 4필드 포함, 잔여는 한도-사용 (R3.1)', async
   assert.equal(d.manual_limit, 10);
   assert.equal(d.manual_remaining, 7);
   assert.equal(d.manual_reset_at, '2026-07-15T15:00:00.000Z');
+  assert.equal(findByIdCalls, 1); // 중복 SELECT 없음
 });
 
-test('status — 날짜가 바뀌면 usage 0 기준으로 응답 (R3.2)', async () => {
+test('status — 저장된 날짜가 어제면 usage 0 기준으로 응답 (R3.2)', async () => {
   const { deps } = makeDeps();
-  deps.users.getManualEtlUsage = async (id, today) => (today === '2026-07-15' ? 0 : 99);
+  deps.users.findById = async () => userRow({ manual_etl_date: '2026-07-14', manual_etl_count: 99 });
   const c = createEtlController(deps);
   const res = makeRes();
   await c.status(req, res, (e) => { throw e; });
@@ -139,9 +148,28 @@ test('status — 날짜가 바뀌면 usage 0 기준으로 응답 (R3.2)', async 
 
 test('status — 사용량이 한도를 넘어도 잔여는 0 미만이 되지 않음', async () => {
   const { deps } = makeDeps();
-  deps.users.getManualEtlUsage = async () => 12;
+  deps.users.findById = async () => userRow({ manual_etl_count: 12 });
   const c = createEtlController(deps);
   const res = makeRes();
   await c.status(req, res, (e) => { throw e; });
   assert.equal(res.body.data.manual_remaining, 0);
+});
+
+test('run — query_id가 숫자가 아니면 한도 소비 전에 400 (남용 방지)', async () => {
+  const { deps, calls } = makeDeps();
+  const c = createEtlController(deps);
+  let err;
+  await c.run({ user: { id: 7 }, query: { query_id: 'abc' } }, makeRes(), (e) => { err = e; });
+  assert.equal(err.status, 400);
+  assert.equal(err.code, 'VALIDATION_ERROR');
+  assert.equal(calls.consume.length, 0); // 소비하지 않음
+  assert.equal(calls.run.length, 0);
+});
+
+test('run — 유효한 query_id는 소비 후 해당 조건만 실행', async () => {
+  const { deps, calls } = makeDeps();
+  const c = createEtlController(deps);
+  await c.run({ user: { id: 7 }, query: { query_id: '5' } }, makeRes(), (e) => { throw e; });
+  assert.equal(calls.consume.length, 1);
+  assert.deepEqual(calls.run[0], [7, { queryId: 5 }]);
 });
