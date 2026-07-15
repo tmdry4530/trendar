@@ -8,6 +8,12 @@
   margin-bottom: 20px;
 }
 
+.etlControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .title {
   /* inherits .page__title via className, no margin-bottom override needed */
   margin-bottom: 0 !important;

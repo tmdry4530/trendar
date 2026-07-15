@@ -125,6 +125,12 @@ export interface EtlStatus {
   last_etl_message: string | null;
   running: boolean;
   cron: string;
+  /** 오늘(KST) 수동 수집 사용 횟수 */
+  manual_used_today: number;
+  manual_limit: number;
+  manual_remaining: number;
+  /** 한도 리셋 시각(다음 KST 자정)의 ISO 문자열 */
+  manual_reset_at: string;
 }
 
 /** DELETE 공통 응답 */

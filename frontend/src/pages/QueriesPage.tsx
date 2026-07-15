@@ -1,14 +1,14 @@
 // QueriesPage.tsx — 검색 조건(WatchQuery) CRUD 페이지.
 import { useState } from 'react';
 import { listQueries, updateQuery, deleteQuery } from '../api/queries';
-import { runEtl } from '../api/stats';
+import { runEtl, getEtlStatus } from '../api/stats';
 import { useAsync } from '../lib/useAsync';
 import { formatInt, formatRelativeTime } from '../lib/format';
 import { useToast } from '../components/Toast';
 import { LoadingState, EmptyState, ErrorState } from '../components/States';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryForm from '../components/QueryForm';
-import type { WatchQuery, QueryType } from '../types';
+import type { WatchQuery, QueryType, EtlStatus } from '../types';
 import styles from './QueriesPage.module.css';
 
 // ── Types ────────────────────────────────────────────────────────────────────
@@ -38,6 +38,13 @@ export default function QueriesPage() {
   // Global ETL state
   const [etlRunning, setEtlRunning] = useState(false);
 
+  // 수동 수집 일일 한도 (배지 표시 + 버튼 게이트)
+  const { data: etl, reload: reloadEtl } = useAsync<EtlStatus>(() => getEtlStatus(), []);
+  const quotaExhausted = etl !== null && etl.manual_remaining === 0;
+  const quotaTooltip = quotaExhausted
+    ? '오늘 수동 수집 한도를 모두 사용했습니다 · KST 자정에 초기화됩니다'
+    : 'KST 자정에 초기화됩니다';
+
   // Per-row ETL running ids
   const [rowEtlId, setRowEtlId] = useState<number | null>(null);
 
@@ -65,6 +72,7 @@ export default function QueriesPage() {
       toast.error(msg);
     } finally {
       setEtlRunning(false);
+      reloadEtl(); // 잔여 한도 동기화 (429 포함)
     }
   }
 
@@ -83,6 +91,7 @@ export default function QueriesPage() {
       toast.error(msg);
     } finally {
       setRowEtlId(null);
+      reloadEtl(); // 잔여 한도 동기화 (429 포함)
     }
   }
 
@@ -280,8 +289,8 @@ export default function QueriesPage() {
           type="button"
           className="btn btn--sm"
           onClick={() => handleRowEtl(row.id)}
-          disabled={isRowEtlRunning || editState !== null || etlRunning}
-          title="이 조건만 ETL 실행"
+          disabled={isRowEtlRunning || editState !== null || etlRunning || quotaExhausted}
+          title={quotaExhausted ? quotaTooltip : '이 조건만 ETL 실행'}
           aria-label="ETL 실행"
         >
           {isRowEtlRunning ? (
@@ -313,15 +322,26 @@ export default function QueriesPage() {
       {/* Header */}
       <div className={styles.headerRow}>
         <div className={`page__title ${styles.title}`}>QUERIES</div>
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={handleRunAllEtl}
-          disabled={etlRunning}
-        >
-          {etlRunning ? <span className="spinner" /> : null}
-          전체 ETL 실행
-        </button>
+        <div className={styles.etlControls}>
+          {etl !== null && (
+            <span
+              className={quotaExhausted ? 'pill pill--accent' : 'pill'}
+              title={quotaTooltip}
+            >
+              오늘 {etl.manual_used_today}/{etl.manual_limit}회
+            </span>
+          )}
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={handleRunAllEtl}
+            disabled={etlRunning || quotaExhausted}
+            title={quotaExhausted ? quotaTooltip : undefined}
+          >
+            {etlRunning ? <span className="spinner" /> : null}
+            전체 ETL 실행
+          </button>
+        </div>
       </div>
 
       {/* New query form */}

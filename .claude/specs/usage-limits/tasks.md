@@ -23,7 +23,7 @@ created: 2026-07-15
   - 요구사항: R1.1, R1.2, R1.4, R1.5, R3.1, R3.2
   - 완료 조건: 신규 테스트 전부 통과 + 기존 테스트 무회귀
 
-- [ ] **T4. 프론트 — 잔여 배지 + 버튼 비활성 + mock**
+- [x] **T4. 프론트 — 잔여 배지 + 버튼 비활성 + mock**
   - 내용: `types.ts` EtlStatus 4필드 확장, `QueriesPage`에 status 로드 → 헤더에 "오늘 N/10회" 배지, `manual_remaining === 0`이면 전체·행별 실행 버튼 비활성 + "KST 자정에 초기화됩니다" 툴팁, 수집 후·429 후 status 재조회. `mock.ts` etlStatus 동일 형태 반영
   - 요구사항: R2.1, R2.2, R2.3, R2.4
   - 완료 조건: `npm run build`(tsc + vite) 통과, VITE_USE_MOCK=true에서 배지 렌더 확인

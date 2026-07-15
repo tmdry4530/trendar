@@ -253,7 +253,26 @@ function deleteRepo(id: number): DeletedResult {
 }
 
 // ── etl ─────────────────────────────────────────────────────────────────────
+const MANUAL_LIMIT = 10;
+let manualUsed = 0;
+
+function nextKstMidnight(): string {
+  const KST_OFFSET_MS = 9 * 60 * 60 * 1000;
+  const shifted = new Date(Date.now() + KST_OFFSET_MS);
+  return new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate() + 1) - KST_OFFSET_MS,
+  ).toISOString();
+}
+
 function runEtl(query?: Record<string, unknown>): EtlRunResult {
+  if (manualUsed >= MANUAL_LIMIT) {
+    throw new ApiError(
+      `오늘의 수동 수집 한도(${MANUAL_LIMIT}회)를 모두 사용했습니다. KST 자정에 초기화됩니다.`,
+      'ETL_DAILY_LIMIT_EXCEEDED',
+      429,
+    );
+  }
+  manualUsed++;
   const queryId = query?.query_id != null && query.query_id !== '' ? Number(query.query_id) : undefined;
   const targets = queryId
     ? repos.filter((r) => r.query_id === queryId)
@@ -299,6 +318,10 @@ function etlStatus(): EtlStatus {
     last_etl_message: lastEtlAt ? `쿼리 ${queries.filter((q) => q.is_active).length}건 수집` : null,
     running: false,
     cron: '0 */6 * * *',
+    manual_used_today: manualUsed,
+    manual_limit: MANUAL_LIMIT,
+    manual_remaining: Math.max(MANUAL_LIMIT - manualUsed, 0),
+    manual_reset_at: nextKstMidnight(),
   };
 }
 
