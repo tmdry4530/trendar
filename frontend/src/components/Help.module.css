@@ -1,5 +1,4 @@
 .wrap {
-  position: relative;
   display: inline-flex;
   vertical-align: middle;
 }
@@ -22,16 +21,16 @@
   transition: color 0.12s var(--ease), border-color 0.12s var(--ease);
 }
 .badge:hover,
-.wrap:focus-within .badge {
+.badge:focus-visible {
   color: var(--accent);
   border-color: var(--accent-dim);
 }
 
+/* body 포탈로 렌더 — fixed 기준이라 어떤 overflow 컨테이너에도 잘리지 않는다.
+   left/top 은 인라인 style 로 배지 중앙에 맞춰 주입, transform 으로 위/아래 배치. */
 .tip {
-  position: absolute;
-  bottom: calc(100% + 7px);
-  left: 50%;
-  transform: translateX(-50%);
+  position: fixed;
+  transform: translate(-50%, calc(-100% - 8px)); /* 배지 위쪽 */
   width: max-content;
   max-width: 240px;
   padding: 7px 10px;
@@ -41,19 +40,22 @@
   color: var(--text);
   font-family: var(--sans);
   font-size: 12px;
+  font-weight: 400;
   line-height: 1.45;
   letter-spacing: normal;
   text-align: left;
   white-space: normal;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.45);
-  opacity: 0;
-  visibility: hidden;
-  transition: opacity 0.12s var(--ease);
+  text-transform: none;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   z-index: var(--z-toast);
   pointer-events: none;
+  animation: help-in 0.1s var(--ease) both;
 }
-.badge:hover + .tip,
-.wrap:focus-within .tip {
-  opacity: 1;
-  visibility: visible;
+.tipBottom {
+  transform: translate(-50%, 8px); /* 배지 아래쪽 */
+}
+
+@keyframes help-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
