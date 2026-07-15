@@ -212,9 +212,10 @@ input, select, textarea { font: inherit; color: inherit; }
 /* 헤더도 값과 같은 오른쪽 정렬로 (`.table th`의 left 정렬보다 우선) */
 .table th.col-num { text-align: right; }
 
-/* 중앙정렬 테이블 변형 — 첫 컬럼(이름)만 좌측, 나머지 컬럼은 헤더·값 모두 중앙 */
+/* 중앙정렬 테이블 변형 — 모든 컬럼 헤더·값 중앙정렬 */
 .table--center th, .table--center td { text-align: center; }
-.table--center th:first-child, .table--center td:first-child { text-align: left; }
+/* col-num의 우측정렬을 중앙으로 덮되 mono/tabular 숫자 스타일은 유지 */
+.table--center th.col-num, .table--center td.col-num { text-align: center; }
 
 /* ── pills / badges / tags ─────────────────────────────────────────────── */
 .pill {

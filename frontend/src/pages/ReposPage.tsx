@@ -228,7 +228,7 @@ export default function ReposPage() {
             )
           ) : (
             <div className={`panel panel--flush ${styles.tableWrap}`}>
-              <table className="table table--rows">
+              <table className="table table--rows table--center">
                 <thead>
                   <tr>
                     <th aria-label="북마크" />
