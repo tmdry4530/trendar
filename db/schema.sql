@@ -18,6 +18,8 @@ CREATE TABLE users (
   avatar_url        VARCHAR(500),
   access_token_enc  TEXT,
   token_invalid     BOOLEAN        NOT NULL DEFAULT FALSE,
+  manual_etl_date   DATE,                            -- 마지막 수동 수집의 KST 날짜
+  manual_etl_count  INT            NOT NULL DEFAULT 0, -- 그 날짜의 사용 횟수
   last_etl_at       DATETIME,
   last_etl_status   ENUM('ok','error','token_invalid'),
   last_etl_message  VARCHAR(500),

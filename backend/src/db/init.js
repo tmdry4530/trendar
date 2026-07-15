@@ -16,8 +16,27 @@ async function dropLegacySchema() {
   await pool.query('DROP TABLE IF EXISTS watch_queries');
 }
 
+// v2 users 테이블에 이후 추가된 컬럼을 채운다. 이미 있으면 아무것도 하지 않는다.
+async function migrateUsersColumns() {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
+  );
+  if (rows.length === 0) return; // users 자체가 없으면 CREATE가 최신 스키마로 만든다
+  const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+  if (!columns.has('manual_etl_date')) {
+    await pool.query('ALTER TABLE users ADD COLUMN manual_etl_date DATE AFTER token_invalid');
+  }
+  if (!columns.has('manual_etl_count')) {
+    await pool.query(
+      'ALTER TABLE users ADD COLUMN manual_etl_count INT NOT NULL DEFAULT 0 AFTER manual_etl_date'
+    );
+  }
+}
+
 export async function initDb() {
   await dropLegacySchema();
+  await migrateUsersColumns();
 
   await pool.query(`CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -27,6 +46,8 @@ export async function initDb() {
     avatar_url VARCHAR(500),
     access_token_enc TEXT,
     token_invalid BOOLEAN NOT NULL DEFAULT FALSE,
+    manual_etl_date DATE,
+    manual_etl_count INT NOT NULL DEFAULT 0,
     last_etl_at DATETIME,
     last_etl_status ENUM('ok','error','token_invalid'),
     last_etl_message VARCHAR(500),

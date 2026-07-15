@@ -13,7 +13,7 @@ created: 2026-07-15
   - 요구사항: R1.3, R1.6
   - 완료 조건: `npm test` 통과 (기존 32개 + 신규), 자정 직전/직후 날짜 전환 테스트 존재
 
-- [ ] **T2. DB 컬럼 + 멱등 마이그레이션 + 모델 함수**
+- [x] **T2. DB 컬럼 + 멱등 마이그레이션 + 모델 함수**
   - 내용: `users`에 `manual_etl_date DATE`, `manual_etl_count INT NOT NULL DEFAULT 0` — `db/schema.sql`·`db/schema.dbml`·`db/init.js`(CREATE) 3곳 동기화 + init.js에 컬럼 부재 시 `ALTER TABLE` 멱등 마이그레이션. `user.model.js`에 `consumeManualEtl`(조건부 원자 UPDATE)/`refundManualEtl`/`getManualEtlUsage`
   - 요구사항: R1.1, R1.4, R1.7, R3.2
   - 완료 조건: `node -c` 전 파일 통과, 마이그레이션이 컬럼 있을 때 no-op임을 코드로 확인, SQL이 design §4 문장과 일치

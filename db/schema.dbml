@@ -9,6 +9,8 @@ Table users {
   avatar_url        varchar(500)
   access_token_enc  text     [note: 'GitHub OAuth 토큰 — AES-256-GCM 암호문 (iv:tag:cipher)']
   token_invalid     boolean  [not null, default: false]
+  manual_etl_date   date     [note: '마지막 수동 수집의 KST 날짜']
+  manual_etl_count  int      [not null, default: 0, note: '그 날짜의 수동 수집 횟수']
   last_etl_at       datetime
   last_etl_status   etl_status
   last_etl_message  varchar(500)

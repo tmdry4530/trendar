@@ -53,3 +53,48 @@ export async function deleteById(id) {
   const [res] = await pool.query('DELETE FROM users WHERE id = ?', [id]);
   return res.affectedRows > 0;
 }
+
+// 오늘(today, KST 날짜 문자열) 사용 횟수를 원자적으로 1 소비한다.
+// 검사와 증가가 한 문장이라 동시 요청이 한도를 넘길 틈이 없다.
+// 반환 false = 한도 도달로 소비 실패.
+export async function consumeManualEtl(id, today, limit) {
+  const [res] = await pool.query(
+    `UPDATE users SET
+       manual_etl_count = IF(manual_etl_date = ?, manual_etl_count + 1, 1),
+       manual_etl_date = ?
+     WHERE id = ?
+       AND (manual_etl_date IS NULL OR manual_etl_date <> ? OR manual_etl_count < ?)`,
+    [today, today, id, today, limit]
+  );
+  return res.affectedRows > 0;
+}
+
+// 시작 전 거부(중복 실행·토큰 무효)된 소비를 되돌린다. 날짜가 바뀌었으면 no-op.
+export async function refundManualEtl(id, today) {
+  await pool.query(
+    `UPDATE users SET manual_etl_count = GREATEST(manual_etl_count - 1, 0)
+     WHERE id = ? AND manual_etl_date = ?`,
+    [id, today]
+  );
+}
+
+// 오늘 사용 횟수. 저장된 날짜가 today가 아니면 0 (조회에도 리셋 반영).
+export async function getManualEtlUsage(id, today) {
+  const [[row]] = await pool.query(
+    'SELECT manual_etl_date, manual_etl_count FROM users WHERE id = ?',
+    [id]
+  );
+  if (!row || !row.manual_etl_date) return 0;
+  const stored = row.manual_etl_date instanceof Date
+    ? kstDateString(row.manual_etl_date)
+    : String(row.manual_etl_date).slice(0, 10);
+  return stored === today ? row.manual_etl_count : 0;
+}
+
+// mysql2가 DATE를 Date 객체(로컬 자정)로 돌려줄 때 'YYYY-MM-DD'로 복원
+function kstDateString(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
