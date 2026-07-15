@@ -6,6 +6,7 @@
 *, *::before, *::after { box-sizing: border-box; }
 * { margin: 0; }
 html, body, #root { height: 100%; }
+html { scrollbar-gutter: stable; } /* 스크롤바 유무로 인한 라우트 간 좌우 흔들림 방지 */
 body {
   font-family: var(--sans);
   background: var(--bg);
