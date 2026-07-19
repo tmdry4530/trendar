@@ -1,0 +1,21 @@
+/* RisingTable.module.css */
+
+.repoCell {
+  font-family: var(--mono);
+  font-weight: 600;
+  font-size: 12.5px;
+  max-width: 220px;
+}
+
+.age {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--faint);
+  font-variant-numeric: tabular-nums;
+}
+
+.empty {
+  padding: var(--pad);
+  color: var(--faint);
+  font-size: 13px;
+}

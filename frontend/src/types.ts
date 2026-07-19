@@ -103,6 +103,16 @@ export interface TrendRepo {
   language: string | null;
 }
 
+/** GET /api/rising 항목 (신생 급상승) */
+export interface RisingRepo {
+  id: number;
+  full_name: string;
+  language: string | null;
+  stars: number;
+  github_created_at: string;
+  velocity: number;
+}
+
 /** GET /api/stats/languages 항목 */
 export interface LanguageStat {
   language: string | null;

@@ -11,6 +11,7 @@ import type {
   RepoDetailResult,
   Stats,
   TrendRepo,
+  RisingRepo,
   LanguageStat,
   EtlRunResult,
   EtlStatus,
@@ -136,6 +137,7 @@ export async function mockFetch<T>(
   if (path === '/stats' && m === 'GET') return stats() as T;
   if (path === '/stats/languages' && m === 'GET') return languages() as T;
   if (path === '/trends' && m === 'GET') return trends(query) as T;
+  if (path === '/rising' && m === 'GET') return risingRepos(query) as T;
 
   throw new ApiError(`목 핸들러가 없습니다: ${method} ${path}`, 'NOT_FOUND', 404);
 }
@@ -348,6 +350,31 @@ function trends(query?: Record<string, unknown>): TrendRepo[] {
       growth_rate: r.growth_rate,
       language: r.language,
     }));
+}
+// 신생 급상승 샘플 — 기존 시드 레포 중 일부를 "최근 생성"으로 가장한다 (ids: seed() 순번 기준).
+const RISING_SAMPLE: { id: number; ageDays: number }[] = [
+  { id: 3, ageDays: 14 }, // schnetzlerjoe/hermes — 2주 전 생성
+  { id: 14, ageDays: 63 }, // run-llama/llama-agents — 9주 전 생성
+  { id: 4, ageDays: 28 }, // mudrii/hermes-agent-docs — 4주 전 생성
+  { id: 9, ageDays: 42 }, // toolhouse-ai/agent-tools — 6주 전 생성
+];
+function risingRepos(query?: Record<string, unknown>): RisingRepo[] {
+  const limit = query?.limit != null ? Number(query.limit) : 8;
+  return RISING_SAMPLE.map(({ id, ageDays }): RisingRepo | null => {
+    const r = repos.find((repo) => repo.id === id);
+    if (!r) return null;
+    return {
+      id: r.id,
+      full_name: r.full_name,
+      language: r.language,
+      stars: r.stars,
+      github_created_at: new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString(),
+      velocity: Math.round((r.stars / ageDays) * 10) / 10,
+    };
+  })
+    .filter((x): x is RisingRepo => x !== null)
+    .sort((a, b) => b.velocity - a.velocity)
+    .slice(0, limit);
 }
 function languages(): LanguageStat[] {
   const counts = new Map<string, number>();

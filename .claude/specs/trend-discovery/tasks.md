@@ -28,7 +28,7 @@ created: 2026-07-19
   - 요구사항: R2.2, R4.1, R4.4, R5.1
   - 완료 조건: `node -c` 통과, SQL이 design §3 문장과 일치(GREATEST 0-나눗셈 방지 포함), limit·windowDays 파라미터화 확인
 
-- [ ] **T5. 프론트 — '신생 급상승' 패널 + mock**
+- [x] **T5. 프론트 — '신생 급상승' 패널 + mock**
   - 내용: `types.ts` `RisingRepo`, `api/stats.ts` `getRising`, `api/mock.ts` `/rising` 핸들러(신생 샘플 데이터), `DashboardPage.tsx` Top Movers 아래 '신생 급상승' 패널(레포명·언어·스타·나이 배지, 빈 상태 처리)
   - 요구사항: R4.1, R4.2, R4.3
   - 완료 조건: `npm run build`(tsc+vite) 통과, VITE_USE_MOCK=true 헤드리스 스크린샷으로 패널 렌더·빈 상태 확인

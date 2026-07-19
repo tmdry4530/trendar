@@ -1,16 +1,18 @@
 // DashboardPage.tsx — 대시보드: 통계 카드 4개 + Top Movers 테이블 + 언어 분포 바
 import { useAsync } from '../lib/useAsync';
-import { getStats, getTrends, getLanguages } from '../api/stats';
+import { getStats, getTrends, getRising, getLanguages } from '../api/stats';
 import { formatCompactAge, formatInt } from '../lib/format';
 import { LoadingState, ErrorState } from '../components/States';
 import StatCard from '../components/StatCard';
 import TrendTable from '../components/TrendTable';
+import RisingTable from '../components/RisingTable';
 import LanguageBars from '../components/LanguageBars';
 import styles from './DashboardPage.module.css';
 
 export default function DashboardPage() {
   const stats = useAsync(() => getStats(), []);
   const trends = useAsync(() => getTrends(10), []);
+  const rising = useAsync(() => getRising(), []);
   const languages = useAsync(() => getLanguages(), []);
 
   return (
@@ -76,6 +78,27 @@ export default function DashboardPage() {
                   loading={trends.loading}
                   error={trends.error}
                   onRetry={trends.reload}
+                />
+              )}
+            </div>
+          </div>
+
+          {/* 신생 급상승 */}
+          <div className="panel panel--flush" style={{ marginTop: 'var(--gap)' }}>
+            <div className="panel__head" style={{ padding: 'var(--pad) var(--pad) 0' }}>
+              <span className="panel__title">신생 급상승</span>
+            </div>
+            <div className={styles.panelBody}>
+              {rising.loading ? (
+                <div style={{ padding: 'var(--pad)' }}>
+                  <LoadingState />
+                </div>
+              ) : (
+                <RisingTable
+                  data={rising.data}
+                  loading={rising.loading}
+                  error={rising.error}
+                  onRetry={rising.reload}
                 />
               )}
             </div>

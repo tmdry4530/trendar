@@ -50,6 +50,8 @@ export function formatRelativeTime(iso: string | null | undefined): string {
   if (hr < 24) return `${hr}시간 전`;
   const day = Math.round(hr / 24);
   if (day < 30) return `${day}일 전`;
+  const month = Math.round(day / 30);
+  if (month < 12) return `${month}개월 전`;
   return new Date(iso).toLocaleDateString('ko-KR');
 }
 
