@@ -33,7 +33,7 @@ created: 2026-07-19
   - 요구사항: R4.1, R4.2, R4.3
   - 완료 조건: `npm run build`(tsc+vite) 통과, VITE_USE_MOCK=true 헤드리스 스크린샷으로 패널 렌더·빈 상태 확인
 
-- [ ] **T6. 배포 + 실서비스 검증**
+- [x] **T6. 배포 + 실서비스 검증**
   - 내용: 커밋·푸시 → Railway 자동 배포 → 부팅 로그 마이그레이션 확인 → 수동 수집 1회 실행 후 `/api/rising` 응답에 신생 레포 포함 확인
   - 요구사항: R2.3, 성공 기준 전체
   - 완료 조건: 배포 SUCCESS, rising 응답에 `github_created_at`·`velocity` 필드, 대시보드에 섹션 표시
