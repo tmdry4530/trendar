@@ -18,7 +18,7 @@ created: 2026-07-19
   - 요구사항: R2.1, R2.3
   - 완료 조건: `node -c` 전 파일 통과, 3곳(schema.sql/dbml/init.js) 컬럼 정의 일치, 기존 테스트 무회귀
 
-- [ ] **T3. pipeline — 슬라이스 루프 + 실행 단위 dedup + 테스트**
+- [x] **T3. pipeline — 슬라이스 루프 + 실행 단위 dedup + 테스트**
   - 내용: `runPipelineForUser`에 `seen Set` 도입, 조건 루프 안을 base/trend 슬라이스 루프로 개편(슬라이스별 minStars 가드), 슬라이스 실패 격리(errors[]), 401 특별 취급 유지. `pipeline.test.js` 확장 — design §6의 4개 시나리오(dedup 스냅샷 1회 / 첫 조건 귀속 / trend 슬라이스 실패 격리 / 슬라이스별 하한)
   - 요구사항: R1.1, R1.3, R1.4, R3.1, R3.2
   - 완료 조건: 신규 테스트 전부 통과 + 기존 테스트 무회귀

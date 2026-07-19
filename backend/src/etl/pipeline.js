@@ -8,6 +8,7 @@ import { httpError } from '../middleware/errorHandler.js';
 import { extractRepos } from './extract.js';
 import { normalizeRepo, computeDelta } from './transform.js';
 import { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot } from './load.js';
+import { trendWindowDays, trendMinStars } from '../utils/limits.js';
 
 const MIN_STARS = Number(process.env.ETL_MIN_STARS) || 0;
 const TOKEN_INVALID_MESSAGE = 'GitHub 연결이 유효하지 않습니다. 다시 로그인해 주세요.';
@@ -70,31 +71,45 @@ export function createEtlRunner(deps) {
       const result = { queries_processed: 0, repos_upserted: 0, snapshots_inserted: 0, repos_skipped: 0, errors: [] };
       const queries = await queryFn(userId, queryId);
 
+      // 실행(run) 단위 dedup — 슬라이스·조건 간 같은 github_id는 1회만 적재해 스냅샷 오염을 막는다 (R3).
+      const seen = new Set();
+      // 신생 슬라이스의 created:> 하한. 나이는 실행 시점 기준이면 충분하므로 실행당 1회만 계산해 재사용한다.
+      const createdAfter = new Date(Date.now() - trendWindowDays() * 86400000).toISOString().slice(0, 10);
+
       for (const wq of queries) {
-        try {
-          const raw = await extractRepos(wq, octokit);
-          for (const item of raw) {
-            const repo = normalizeRepo(item, wq.id, userId);
-            if (!repo.github_id) continue;
-            if (repo.stars < MIN_STARS) { result.repos_skipped++; continue; }
-            const repoId = await upsertRepo(repo);
-            const prev = await getLastSnapshot(repoId);
-            const delta = computeDelta(repo, prev);
-            await insertSnapshot(repoId, repo);
-            await updateRepoDelta(repoId, delta);
-            result.repos_upserted++;
-            result.snapshots_inserted++;
+        // base=스타순 베이스라인, trend=신생(created:>) 슬라이스. 슬라이스별 스타 하한이 다르다 (R1).
+        const slices = [
+          { label: 'base', minStars: MIN_STARS },
+          { label: 'trend', minStars: trendMinStars(), createdAfter },
+        ];
+        for (const slice of slices) {
+          try {
+            const raw = await extractRepos(wq, octokit, { minStars: slice.minStars, createdAfter: slice.createdAfter });
+            for (const item of raw) {
+              const repo = normalizeRepo(item, wq.id, userId);
+              if (!repo.github_id) continue;
+              if (seen.has(repo.github_id)) continue; // 이미 적재된 레포 — 카운트 증가 없이 스킵 (R3.1/R3.2)
+              if (repo.stars < slice.minStars) { result.repos_skipped++; continue; }
+              const repoId = await upsertRepo(repo);
+              const prev = await getLastSnapshot(repoId);
+              const delta = computeDelta(repo, prev);
+              await insertSnapshot(repoId, repo);
+              await updateRepoDelta(repoId, delta);
+              seen.add(repo.github_id);
+              result.repos_upserted++;
+              result.snapshots_inserted++;
+            }
+          } catch (e) {
+            console.error(`[etl] user#${userId} query#${wq.id} [${slice.label}] 수집 실패:`, e);
+            if (e.status === 401) {
+              await users.setTokenInvalid(userId);
+              await users.updateEtlResult(userId, { status: 'token_invalid', message: 'GitHub 인증에 실패했습니다 (401).' });
+              throw httpError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
+            }
+            result.errors.push(`query#${wq.id} ${wq.query} [${slice.label}]: ${e.message}`);
           }
-          result.queries_processed++;
-        } catch (e) {
-          console.error(`[etl] user#${userId} query#${wq.id} 수집 실패:`, e);
-          if (e.status === 401) {
-            await users.setTokenInvalid(userId);
-            await users.updateEtlResult(userId, { status: 'token_invalid', message: 'GitHub 인증에 실패했습니다 (401).' });
-            throw httpError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
-          }
-          result.errors.push(`query#${wq.id} ${wq.query}: ${e.message}`);
         }
+        result.queries_processed++;
       }
 
       const status = result.errors.length ? 'error' : 'ok';
