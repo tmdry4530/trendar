@@ -68,6 +68,7 @@ CREATE TABLE repos (
   stars           INT            DEFAULT 0,
   star_delta      INT            DEFAULT 0,
   growth_rate     DOUBLE         DEFAULT 0,
+  github_created_at DATETIME     NULL,  -- GitHub 레포 생성 시각 (Search API created_at)
   note            TEXT,
   is_bookmarked   BOOLEAN        NOT NULL DEFAULT FALSE,
   first_seen_at   TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -77,6 +78,7 @@ CREATE TABLE repos (
   KEY idx_query   (query_id),
   KEY idx_stars   (stars),
   KEY idx_growth  (growth_rate),        -- trends 정렬에 사용되는 인덱스
+  KEY idx_user_created (user_id, github_created_at), -- rising 조회(사용자+생성일 범위 스캔)
   CONSTRAINT fk_repo_user
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_repo_query

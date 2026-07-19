@@ -13,7 +13,7 @@ created: 2026-07-19
   - 요구사항: R1.1, R1.2, R1.3, R5.1~R5.3
   - 완료 조건: `npm test` 통과 (기존 52 + 신규), topic/keyword × createdAfter 유무 × minStars 조합 질의 문자열 검증
 
-- [ ] **T2. DB — repos.github_created_at 컬럼 + 마이그레이션 + 정규화·적재**
+- [x] **T2. DB — repos.github_created_at 컬럼 + 마이그레이션 + 정규화·적재**
   - 내용: `db/schema.sql`·`db/schema.dbml`에 컬럼·인덱스(`idx_user_created`) 추가, `db/init.js`에 repos 멱등 ALTER 마이그레이션, `transform.js` `normalizeRepo`에 `github_created_at`, `load.js` `upsertRepo` 컬럼 반영
   - 요구사항: R2.1, R2.3
   - 완료 조건: `node -c` 전 파일 통과, 3곳(schema.sql/dbml/init.js) 컬럼 정의 일치, 기존 테스트 무회귀

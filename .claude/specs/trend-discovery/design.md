@@ -104,7 +104,7 @@ github_created_at  DATETIME NULL   -- GitHub 레포 생성 시각 (Search API cr
 ```
 
 - NULL 허용 — 마이그레이션 이전 수집분은 값이 없고, rising 조회의 `WHERE github_created_at >= ...`가 자연히 제외한다. 다음 수집에서 upsert로 채워짐.
-- 인덱스: `KEY idx_created (user_id, github_created_at)` — rising 조회가 사용자+생성일 범위 스캔이므로.
+- 인덱스: `KEY idx_user_created (user_id, github_created_at)` — rising 조회가 사용자+생성일 범위 스캔이므로.
 
 ## 5. 에러 처리
 

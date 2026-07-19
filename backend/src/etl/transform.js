@@ -13,6 +13,8 @@ export function normalizeRepo(raw, queryId, userId) {
     forks: raw.forks_count ?? 0,
     open_issues: raw.open_issues_count ?? 0,
     watchers: raw.watchers_count ?? 0,
+    // ISO 문자열('...Z')을 그대로 DATETIME에 넣으면 strict 모드에서 거부될 수 있어 Date로 변환
+    github_created_at: raw.created_at ? new Date(raw.created_at) : null,
   };
 }
 

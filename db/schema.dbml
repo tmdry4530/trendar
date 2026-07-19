@@ -67,16 +67,18 @@ Table repos {
   stars          int          [default: 0]
   star_delta     int          [default: 0]
   growth_rate    double       [default: 0]
+  github_created_at datetime  [note: 'GitHub 레포 생성 시각 (Search API created_at)']
   note           text
   is_bookmarked  boolean      [not null, default: false]
   first_seen_at  timestamp    [not null, default: `CURRENT_TIMESTAMP`]
   updated_at     timestamp    [not null, default: `CURRENT_TIMESTAMP`]
 
   indexes {
-    (user_id, github_id) [unique, name: 'uq_user_github']
-    query_id             [name: 'idx_query']
-    stars                [name: 'idx_stars']
-    growth_rate          [name: 'idx_growth', note: 'trends 정렬용']
+    (user_id, github_id)        [unique, name: 'uq_user_github']
+    query_id                    [name: 'idx_query']
+    stars                       [name: 'idx_stars']
+    growth_rate                 [name: 'idx_growth', note: 'trends 정렬용']
+    (user_id, github_created_at) [name: 'idx_user_created', note: 'rising 조회(사용자+생성일 범위 스캔)']
   }
 }
 

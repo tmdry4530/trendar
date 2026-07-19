@@ -34,9 +34,24 @@ async function migrateUsersColumns() {
   }
 }
 
+// v2 repos 테이블에 이후 추가된 컬럼을 채운다. 이미 있으면 아무것도 하지 않는다.
+async function migrateReposColumns() {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'repos'`
+  );
+  if (rows.length === 0) return; // repos 자체가 없으면 CREATE가 최신 스키마로 만든다
+  const columns = new Set(rows.map((row) => row.COLUMN_NAME));
+  if (!columns.has('github_created_at')) {
+    await pool.query('ALTER TABLE repos ADD COLUMN github_created_at DATETIME NULL AFTER growth_rate');
+    await pool.query('ALTER TABLE repos ADD KEY idx_user_created (user_id, github_created_at)');
+  }
+}
+
 export async function initDb() {
   await dropLegacySchema();
   await migrateUsersColumns();
+  await migrateReposColumns();
 
   await pool.query(`CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -91,6 +106,7 @@ export async function initDb() {
     stars INT DEFAULT 0,
     star_delta INT DEFAULT 0,
     growth_rate DOUBLE DEFAULT 0,
+    github_created_at DATETIME NULL,
     note TEXT,
     is_bookmarked BOOLEAN NOT NULL DEFAULT FALSE,
     first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -99,6 +115,7 @@ export async function initDb() {
     KEY idx_query (query_id),
     KEY idx_stars (stars),
     KEY idx_growth (growth_rate),
+    KEY idx_user_created (user_id, github_created_at),
     CONSTRAINT fk_repo_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_repo_query FOREIGN KEY (query_id) REFERENCES watch_queries(id) ON DELETE CASCADE
   )`);
