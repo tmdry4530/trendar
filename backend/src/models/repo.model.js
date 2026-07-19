@@ -85,6 +85,26 @@ export async function trends(userId, limit = 10) {
   return rows.map((r) => ({ ...r, stars: Number(r.stars), star_delta: Number(r.star_delta), growth_rate: Number(r.growth_rate) }));
 }
 
+// 신생(윈도우일 이내 생성) 레포를 속도(스타/경과일) 순으로. velocity는 나이가
+// 매일 변하므로 저장하지 않고 조회 시 계산한다 (ADR-0005).
+export async function risingRepos(userId, windowDays, limit = 8) {
+  const [rows] = await pool.query(
+    `SELECT id, full_name, language, stars, github_created_at,
+            stars / GREATEST(DATEDIFF(NOW(), github_created_at), 1) AS velocity
+     FROM repos
+     WHERE user_id = ? AND github_created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+     ORDER BY velocity DESC, stars DESC
+     LIMIT ?`,
+    [userId, Number(windowDays), Number(limit)]
+  );
+  return rows.map((r) => ({
+    ...r,
+    stars: Number(r.stars),
+    velocity: Number(r.velocity),
+    github_created_at: r.github_created_at ? new Date(r.github_created_at).toISOString() : null,
+  }));
+}
+
 export async function languageDist(userId) {
   const [rows] = await pool.query(
     "SELECT language, COUNT(*) AS count FROM repos WHERE user_id = ? AND language IS NOT NULL AND language <> '' GROUP BY language ORDER BY count DESC",

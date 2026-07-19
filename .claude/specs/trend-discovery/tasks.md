@@ -23,7 +23,7 @@ created: 2026-07-19
   - 요구사항: R1.1, R1.3, R1.4, R3.1, R3.2
   - 완료 조건: 신규 테스트 전부 통과 + 기존 테스트 무회귀
 
-- [ ] **T4. rising API — 모델·컨트롤러·라우트**
+- [x] **T4. rising API — 모델·컨트롤러·라우트**
   - 내용: `repo.model.js`에 `risingRepos(userId, windowDays, limit)`(velocity SQL 계산), `repo.controller.js`에 `rising`, `stats.routes.js`에 `GET /rising` 등록(requireAuth 뒤)
   - 요구사항: R2.2, R4.1, R4.4, R5.1
   - 완료 조건: `node -c` 통과, SQL이 design §3 문장과 일치(GREATEST 0-나눗셈 방지 포함), limit·windowDays 파라미터화 확인

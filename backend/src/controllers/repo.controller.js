@@ -1,5 +1,6 @@
 import * as Repo from '../models/repo.model.js';
 import { httpError } from '../middleware/errorHandler.js';
+import { trendWindowDays } from '../utils/limits.js';
 
 export async function list(req, res, next) {
   try {
@@ -51,6 +52,13 @@ export async function stats(req, res, next) {
 export async function trends(req, res, next) {
   try { res.json({ ok: true, data: await Repo.trends(req.user.id, req.query.limit ? Number(req.query.limit) : 10) }); }
   catch (e) { next(e); }
+}
+
+export async function rising(req, res, next) {
+  try {
+    const limit = req.query.limit ? Number(req.query.limit) : 8;
+    res.json({ ok: true, data: await Repo.risingRepos(req.user.id, trendWindowDays(), limit) });
+  } catch (e) { next(e); }
 }
 
 export async function languages(req, res, next) {
