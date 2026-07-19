@@ -8,7 +8,7 @@ created: 2026-07-19
 
 > 체크박스가 실행 상태의 단일 진실 공급원이다. 태스크 완료 = 완료 조건 + 연결된 인수 조건 충족 + 관련 테스트 통과.
 
-- [ ] **T1. 설정 + extract 옵션 주입형 개편 + 테스트**
+- [x] **T1. 설정 + extract 옵션 주입형 개편 + 테스트**
   - 내용: `utils/limits.js`에 `trendWindowDays()`(기본 90)/`trendMinStars()`(기본 50) 추가. `extract.js`를 `extractRepos(wq, octokit, { minStars, createdAfter })`로 개편 — `created:>` 한정자, 슬라이스별 `stars:>=` 조립. `test/extract.test.js` 신규(질의 조립 케이스) + `kst.test.js`(limits 케이스 위치)에 trend 설정 테스트 추가
   - 요구사항: R1.1, R1.2, R1.3, R5.1~R5.3
   - 완료 조건: `npm test` 통과 (기존 52 + 신규), topic/keyword × createdAfter 유무 × minStars 조합 질의 문자열 검증
