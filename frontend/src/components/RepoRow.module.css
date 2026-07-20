@@ -28,6 +28,7 @@
   font-size: 11.5px;
   margin-top: 2px;
   max-width: 320px;
+  margin-inline: auto; /* max-width 박스를 셀 중앙에 — 제목(중앙정렬)과 정렬 일치 */
 }
 
 .deltaSmall {
