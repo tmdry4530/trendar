@@ -26,7 +26,6 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
       <thead>
         <tr>
           <th>Repo</th>
-          <th>Lang</th>
           <th className="col-num">Stars</th>
           <th className="col-num">Age</th>
         </tr>
@@ -36,17 +35,10 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
           <tr
             key={repo.id}
             onClick={() => navigate(`/repos/${repo.id}`)}
-            title={`velocity ${repo.velocity}`}
+            title={`${repo.language ?? ''} · velocity ${repo.velocity}`.trim()}
           >
             <td>
               <div className={`${styles.repoCell} truncate`}>{repo.full_name}</div>
-            </td>
-            <td>
-              {repo.language ? (
-                <span className="tag">{repo.language}</span>
-              ) : (
-                <span className="faint">—</span>
-              )}
             </td>
             <td className="col-num">
               <span className="stars">★ {formatStars(repo.stars)}</span>

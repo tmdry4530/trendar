@@ -59,7 +59,7 @@ export default function DashboardPage() {
         ) : null}
       </div>
 
-      {/* ── 두 컬럼: Top Movers + 언어 분포 ──────────────────────────── */}
+      {/* ── 두 컬럼: Top Movers ‖ (신생 급상승 + 언어 분포) ─────────── */}
       <div className="row">
         {/* Top Movers */}
         <div className={`col ${styles.trendCol}`}>
@@ -82,9 +82,11 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
+        </div>
 
-          {/* 신생 급상승 */}
-          <div className="panel panel--flush" style={{ marginTop: 'var(--gap)' }}>
+        {/* 오른쪽: 신생 급상승 + 언어 분포 */}
+        <div className={`col ${styles.langCol}`}>
+          <div className="panel panel--flush">
             <div className="panel__head" style={{ padding: 'var(--pad) var(--pad) 0' }}>
               <span className="panel__title">신생 급상승</span>
             </div>
@@ -103,11 +105,8 @@ export default function DashboardPage() {
               )}
             </div>
           </div>
-        </div>
 
-        {/* 언어 분포 */}
-        <div className={`col ${styles.langCol}`}>
-          <div className="panel">
+          <div className="panel" style={{ marginTop: 'var(--gap)' }}>
             <div className="panel__head">
               <span className="panel__title">언어 분포</span>
             </div>
