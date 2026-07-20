@@ -61,9 +61,9 @@ export function formatCompactAge(iso: string | null | undefined): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return '—';
   const diff = Date.now() - then;
-  if (diff < 0) return 'just now';
+  if (diff < 0) return '방금';
   const sec = Math.round(diff / 1000);
-  if (sec < 60) return 'just now';
+  if (sec < 60) return '방금';
   const min = Math.round(sec / 60);
   if (min < 60) return `${min} min`;
   const hr = Math.round(min / 60);

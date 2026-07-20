@@ -17,11 +17,23 @@ export default function LanguageBars({ data, loading, error, onRetry }: Language
     return <EmptyState title="언어 데이터 없음" />;
   }
 
-  const maxCount = Math.max(...data.map((d) => d.count), 1);
+  // 하위 항목(1~2개짜리)이 길게 나열되지 않게 상위 7개 + '기타'로 집계
+  const TOP = 7;
+  const items: LanguageStat[] =
+    data.length > TOP + 1
+      ? [
+          ...data.slice(0, TOP),
+          {
+            language: `기타 (${data.length - TOP}종)`,
+            count: data.slice(TOP).reduce((sum, d) => sum + d.count, 0),
+          },
+        ]
+      : data;
+  const maxCount = Math.max(...items.map((d) => d.count), 1);
 
   return (
     <div className={styles.list}>
-      {data.map((item, idx) => {
+      {items.map((item, idx) => {
         const label = item.language ?? 'Unknown';
         const widthPct = (item.count / maxCount) * 100;
         return (

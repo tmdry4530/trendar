@@ -1,7 +1,7 @@
 // RisingTable.tsx — 신생 급상승 레포 테이블 (velocity 기준 정렬, 최근 생성 레포)
 import { useNavigate } from 'react-router-dom';
 import type { RisingRepo } from '../types';
-import { formatStars, formatRelativeTime } from '../lib/format';
+import { formatStars, formatRelativeTime, formatInt } from '../lib/format';
 import { LoadingState, ErrorState } from './States';
 import styles from './RisingTable.module.css';
 
@@ -35,7 +35,7 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
           <tr
             key={repo.id}
             onClick={() => navigate(`/repos/${repo.id}`)}
-            title={`${repo.language ?? ''} · velocity ${repo.velocity}`.trim()}
+            title={[repo.language, `≈ ${formatInt(Math.round(repo.velocity))}★/일`].filter(Boolean).join(' · ')}
           >
             <td>
               <div className={`${styles.repoCell} truncate`}>{repo.full_name}</div>

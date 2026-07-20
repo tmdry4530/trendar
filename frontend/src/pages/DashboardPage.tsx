@@ -26,7 +26,7 @@ export default function DashboardPage() {
             <StatCard label="Repos" value="—" hint="추적 레포" />
             <StatCard label="Active Queries" value="—" hint="활성 조건" />
             <StatCard label="Bookmarked" value="—" hint="북마크" />
-            <StatCard label="Last ETL" value="—" hint="마지막 수집" accent />
+            <StatCard label="Last ETL" value="—" hint="마지막 수집" />
           </>
         ) : stats.error ? (
           <div style={{ gridColumn: '1 / -1' }}>
@@ -51,21 +51,21 @@ export default function DashboardPage() {
             />
             <StatCard
               label="Last ETL"
-              value={stats.data.last_etl_at ? formatCompactAge(stats.data.last_etl_at) : '—'}
-              hint={stats.data.last_etl_at ? '전 · 마지막 수집' : '아직 없음'}
-              accent
+              value={stats.data.last_etl_at ? `${formatCompactAge(stats.data.last_etl_at)} 전` : '—'}
+              hint={stats.data.last_etl_at ? '마지막 수집' : '아직 없음'}
             />
           </>
         ) : null}
       </div>
 
-      {/* ── 두 컬럼: Top Movers ‖ (신생 급상승 + 언어 분포) ─────────── */}
-      <div className="row">
-        {/* Top Movers */}
-        <div className={`col ${styles.trendCol}`}>
+      {/* ── 두 컬럼: 성장률 상위 ‖ (신생 급상승 + 언어 분포) ─────────── */}
+      <div className={styles.columns}>
+        {/* 성장률 상위 */}
+        <div className={styles.trendCol}>
           <div className="panel panel--flush">
             <div className="panel__head" style={{ padding: 'var(--pad) var(--pad) 0' }}>
-              <span className="panel__title">Top Movers</span>
+              <span className="panel__title">성장률 상위</span>
+              <span className={styles.titleEn}>TOP MOVERS</span>
             </div>
             <div className={styles.panelBody}>
               {trends.loading ? (
@@ -85,10 +85,11 @@ export default function DashboardPage() {
         </div>
 
         {/* 오른쪽: 신생 급상승 + 언어 분포 */}
-        <div className={`col ${styles.langCol}`}>
+        <div className={styles.langCol}>
           <div className="panel panel--flush">
             <div className="panel__head" style={{ padding: 'var(--pad) var(--pad) 0' }}>
               <span className="panel__title">신생 급상승</span>
+              <span className={styles.titleEn}>RISING</span>
             </div>
             <div className={styles.panelBody}>
               {rising.loading ? (
@@ -109,6 +110,7 @@ export default function DashboardPage() {
           <div className="panel" style={{ marginTop: 'var(--gap)' }}>
             <div className="panel__head">
               <span className="panel__title">언어 분포</span>
+              <span className={styles.titleEn}>LANGUAGES</span>
             </div>
             <div className={styles.panelBody}>
               <LanguageBars
