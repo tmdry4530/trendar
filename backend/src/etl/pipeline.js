@@ -6,12 +6,46 @@ import * as usersModel from '../models/user.model.js';
 import { decryptToken } from '../utils/crypto.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { extractRepos } from './extract.js';
-import { normalizeRepo, computeDelta } from './transform.js';
-import { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot } from './load.js';
-import { trendWindowDays, trendMinStars } from '../utils/limits.js';
+import { normalizeRepo, computeDelta, computeRankingDelta as defaultComputeRankingDelta } from './transform.js';
+import {
+  upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot, getDeltaBaselines, findTrackedRepos,
+} from './load.js';
+import { trendWindowDays, trendMinStars, trackedRefreshDays } from '../utils/limits.js';
 
 const MIN_STARS = Number(process.env.ETL_MIN_STARS) || 0;
 const TOKEN_INVALID_MESSAGE = 'GitHub 연결이 유효하지 않습니다. 다시 로그인해 주세요.';
+// GraphQL nodes(ids:) 한 번에 조회할 수 있는 최대 ID 수.
+export const REFRESH_BATCH_SIZE = 100;
+
+// 추적 레포 배치 갱신 쿼리 — open_issues는 REST open_issues_count와 맞추려 이슈+PR 합산.
+export const REFRESH_NODES_QUERY = `query ($ids: [ID!]!) {
+  nodes(ids: $ids) {
+    ... on Repository {
+      id
+      databaseId
+      stargazerCount
+      forkCount
+      issues(states: OPEN) { totalCount }
+      pullRequests(states: OPEN) { totalCount }
+    }
+  }
+}`;
+
+export function chunk(list, size) {
+  const out = [];
+  for (let i = 0; i < list.length; i += size) out.push(list.slice(i, i + size));
+  return out;
+}
+
+function nodeToMetrics(node) {
+  return {
+    stars: node.stargazerCount ?? 0,
+    forks: node.forkCount ?? 0,
+    open_issues: (node.issues?.totalCount ?? 0) + (node.pullRequests?.totalCount ?? 0),
+    // Preserve REST watchers_count semantics: stargazers, not subscribers.
+    watchers: node.stargazerCount,
+  };
+}
 
 // 수집 루프에 진입하기 전(=아직 아무 작업도 하지 않은) 거부임을 표시한다.
 // 컨트롤러는 이 플래그를 보고서만 일일 한도를 환불한다 — 루프 도중 실패는 환불하지 않는다.
@@ -36,7 +70,8 @@ export function createEtlRunner(deps) {
     extractRepos,
     normalizeRepo,
     computeDelta,
-    loaders: { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot },
+    computeRankingDelta = defaultComputeRankingDelta,
+    loaders: { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot, getDeltaBaselines, findTrackedRepos },
     queryFn,
   } = deps;
 
@@ -44,6 +79,74 @@ export function createEtlRunner(deps) {
 
   function isRunning(userId) {
     return running.has(userId);
+  }
+
+  // 스냅샷 1행 적재 + 델타 재계산. 레거시 star_delta는 직전 스냅샷 대비, 나머지는 시간 정규화 (랭킹 v3).
+  async function recordSnapshot(repoId, metrics, { updateStars = false } = {}) {
+    const prev = await getLastSnapshot(repoId);
+    const legacy = computeDelta(metrics, prev);
+    await insertSnapshot(repoId, metrics);
+    const baselines = getDeltaBaselines ? await getDeltaBaselines(repoId) : {};
+    const ranking = computeRankingDelta(metrics.stars, baselines);
+    await updateRepoDelta(repoId, {
+      star_delta: legacy.star_delta,
+      ...ranking,
+      ...(updateStars ? { stars: metrics.stars } : {}),
+    });
+  }
+
+  // 검색 top-N에서 빠진 추적 레포를 GraphQL nodes(ids:)로 100개씩 갱신한다.
+  // node_id가 없는 레포는 건너뛰고(다음 검색 적중 시 저장됨), 401은 호출자에게 그대로 던진다.
+  async function refreshTrackedRepos(userId, octokit, seen, result) {
+    if (!findTrackedRepos) return;
+    const tracked = await findTrackedRepos(userId, trackedRefreshDays());
+    const targets = [];
+    for (const r of tracked) {
+      if (seen.has(Number(r.github_id))) continue; // 이번 실행에서 이미 적재됨
+      if (!r.node_id) { result.refresh_skipped_no_node_id++; continue; }
+      targets.push(r);
+    }
+    for (const batch of chunk(targets, REFRESH_BATCH_SIZE)) {
+      let nodes;
+      try {
+        const data = await octokit.graphql(REFRESH_NODES_QUERY, { ids: batch.map((r) => r.node_id) });
+        nodes = data?.nodes ?? [];
+      } catch (e) {
+        if (e.status === 401) throw e;
+        // 일부 ID가 삭제·비공개 전환되면 GraphQL은 errors와 함께 부분 data를 준다 — 남은 노드는 살린다.
+        if (Array.isArray(e.data?.nodes)) {
+          nodes = e.data.nodes;
+        } else {
+          console.error(`[etl] user#${userId} 추적 레포 갱신 실패:`, e);
+          result.errors.push('추적 중인 프로젝트를 갱신하지 못했습니다.');
+          continue;
+        }
+      }
+      const byNodeId = new Map(nodes.filter((n) => n && n.id).map((n) => [n.id, n]));
+      for (const r of batch) {
+        const node = byNodeId.get(r.node_id);
+        if (!node) continue; // 삭제·접근 불가 레포
+        if (!Number.isInteger(node.stargazerCount) || node.stargazerCount < 0) {
+          result.errors.push('추적 중인 프로젝트의 스타 수를 확인하지 못했습니다.');
+          continue; // Partial GraphQL data must not turn a missing metric into zero stars.
+        }
+        try {
+          await recordSnapshot(r.id, nodeToMetrics(node), { updateStars: true });
+          seen.add(Number(r.github_id));
+          result.repos_refreshed++;
+          result.snapshots_inserted++;
+        } catch (e) {
+          console.error(`[etl] user#${userId} repo#${r.id} 추적 레포 저장 실패:`, e);
+          result.errors.push('추적 중인 프로젝트를 갱신하지 못했습니다.');
+        }
+      }
+    }
+  }
+
+  async function failTokenInvalid(userId) {
+    await users.setTokenInvalid(userId);
+    await users.updateEtlResult(userId, { status: 'token_invalid', message: TOKEN_INVALID_MESSAGE });
+    throw httpError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
   }
 
   async function runPipelineForUser(userId, { queryId } = {}) {
@@ -68,7 +171,10 @@ export function createEtlRunner(deps) {
       }
 
       const octokit = createOctokit(token);
-      const result = { queries_processed: 0, repos_upserted: 0, snapshots_inserted: 0, repos_skipped: 0, errors: [] };
+      const result = {
+        queries_processed: 0, repos_upserted: 0, snapshots_inserted: 0, repos_skipped: 0,
+        repos_refreshed: 0, refresh_skipped_no_node_id: 0, errors: [],
+      };
       const queries = await queryFn(userId, queryId);
 
       // 실행(run) 단위 dedup — 슬라이스·조건 간 같은 github_id는 1회만 적재해 스냅샷 오염을 막는다 (R3).
@@ -91,31 +197,34 @@ export function createEtlRunner(deps) {
               if (seen.has(repo.github_id)) continue; // 이미 적재된 레포 — 카운트 증가 없이 스킵 (R3.1/R3.2)
               if (repo.stars < slice.minStars) { result.repos_skipped++; continue; }
               const repoId = await upsertRepo(repo);
-              const prev = await getLastSnapshot(repoId);
-              const delta = computeDelta(repo, prev);
-              await insertSnapshot(repoId, repo);
-              await updateRepoDelta(repoId, delta);
+              await recordSnapshot(repoId, repo); // last_refreshed_at=NOW() 포함
               seen.add(repo.github_id);
               result.repos_upserted++;
               result.snapshots_inserted++;
             }
           } catch (e) {
             console.error(`[etl] user#${userId} query#${wq.id} [${slice.label}] 수집 실패:`, e);
-            if (e.status === 401) {
-              await users.setTokenInvalid(userId);
-              await users.updateEtlResult(userId, { status: 'token_invalid', message: TOKEN_INVALID_MESSAGE });
-              throw httpError(409, 'GITHUB_TOKEN_INVALID', TOKEN_INVALID_MESSAGE);
-            }
+            if (e.status === 401) await failTokenInvalid(userId);
             result.errors.push('수집 조건을 처리하지 못했습니다.');
           }
         }
         result.queries_processed++;
       }
 
+      // 검색 슬라이스 밖으로 밀려난 추적 레포 갱신 — 오래된 델타가 계속 노출되는 것을 막는다.
+      try {
+        await refreshTrackedRepos(userId, octokit, seen, result);
+      } catch (e) {
+        if (e.status === 401) await failTokenInvalid(userId);
+        console.error(`[etl] user#${userId} 추적 레포 갱신 실패:`, e);
+        result.errors.push('추적 중인 프로젝트를 갱신하지 못했습니다.');
+      }
+
       const status = result.errors.length ? 'error' : 'ok';
       const message = result.errors.length
         ? `수집 조건 ${result.queries_processed}개를 처리하는 중 일부 항목을 수집하지 못했습니다.`
-        : `수집 조건 ${result.queries_processed}개에서 프로젝트 ${result.repos_upserted}개를 수집했습니다.`;
+        : `수집 조건 ${result.queries_processed}개에서 프로젝트 ${result.repos_upserted}개를 수집했습니다.`
+          + (result.repos_refreshed ? ` 추적 중인 프로젝트 ${result.repos_refreshed}개도 갱신했습니다.` : '');
       await users.updateEtlResult(userId, { status, message });
       return result;
     } finally {
@@ -131,7 +240,7 @@ export function createEtlRunner(deps) {
       try {
         const r = await runPipelineForUser(u.id);
         users_ok++;
-        console.log(`[etl] user#${u.id} ${u.login}: ok — queries=${r.queries_processed} upserted=${r.repos_upserted} snapshots=${r.snapshots_inserted} skipped=${r.repos_skipped} errors=${r.errors.length}`);
+        console.log(`[etl] user#${u.id} ${u.login}: ok — queries=${r.queries_processed} upserted=${r.repos_upserted} refreshed=${r.repos_refreshed} snapshots=${r.snapshots_inserted} skipped=${r.repos_skipped} errors=${r.errors.length}`);
       } catch (e) {
         users_failed++;
         console.log(`[etl] user#${u.id} ${u.login}: failed — ${e.code || e.message}`);
@@ -150,7 +259,7 @@ export const { runPipelineForUser, runPipelineAllUsers, isRunning } = createEtlR
   extractRepos,
   normalizeRepo,
   computeDelta,
-  loaders: { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot },
+  loaders: { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot, getDeltaBaselines, findTrackedRepos },
   queryFn: defaultQueryFn,
 });
 
