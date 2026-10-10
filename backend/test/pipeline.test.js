@@ -16,7 +16,7 @@ function makeUsers({ byId = {}, all = [] } = {}) {
 }
 
 function makeLoaders() {
-  const calls = { upsertRepo: [], insertSnapshot: [], updateRepoDelta: [], getLastSnapshot: [] };
+  const calls = { upsertRepo: [], insertSnapshot: [], updateRepoDelta: [], getLastSnapshot: [], getDeltaBaselines: [] };
   let nextId = 500;
   return {
     calls,
@@ -24,6 +24,8 @@ function makeLoaders() {
     updateRepoDelta: async (id, d) => { calls.updateRepoDelta.push({ id, d }); },
     insertSnapshot: async (id, m) => { calls.insertSnapshot.push({ id, m }); },
     getLastSnapshot: async (id) => { calls.getLastSnapshot.push(id); return null; },
+    getDeltaBaselines: async (id) => { calls.getDeltaBaselines.push(id); return { base24h: null, base7d: null, oldest: null }; },
+    findTrackedRepos: async () => [],
   };
 }
 
