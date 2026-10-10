@@ -89,6 +89,10 @@ let querySeq = 3;
       language: s.language,
       stars: s.stars,
       star_delta: s.star_delta,
+      delta_24h: s.star_delta,
+      delta_7d: s.star_delta * 7,
+      score: s.star_delta / Math.sqrt(Math.max(s.stars - s.star_delta, 10)),
+      last_refreshed_at: new Date().toISOString(),
       growth_rate: s.star_delta / Math.max(s.stars - s.star_delta, 1),
       is_bookmarked: Boolean(s.is_bookmarked),
       note: s.note ?? null,
@@ -220,7 +224,7 @@ function listRepos(query?: Record<string, unknown>): RepoListResult {
     );
   }
   list.sort((a, b) => {
-    if (sort === 'growth') return b.growth_rate - a.growth_rate;
+    if (sort === 'growth' || sort === 'score') return b.score - a.score || b.delta_24h - a.delta_24h;
     if (sort === 'recent') return cmp(b.first_seen_at, a.first_seen_at);
     return b.stars - a.stars;
   });
@@ -286,6 +290,10 @@ function runEtl(query?: Record<string, unknown>): EtlRunResult {
     const delta = Math.max(5, Math.round(r.stars * 0.012));
     r.stars += delta;
     r.star_delta = delta;
+    r.delta_24h = delta;
+    r.delta_7d = delta * 7;
+    r.score = delta / Math.sqrt(Math.max(r.stars - delta, 10));
+    r.last_refreshed_at = ranAt;
     r.growth_rate = delta / Math.max(r.stars - delta, 1);
     const prev = snapshots[r.id]?.[snapshots[r.id].length - 1];
     snapshots[r.id] = [
@@ -308,6 +316,8 @@ function runEtl(query?: Record<string, unknown>): EtlRunResult {
     repos_upserted: targets.length,
     snapshots_inserted: snapsInserted,
     repos_skipped: 0,
+    repos_refreshed: 0,
+    refresh_skipped_no_node_id: 0,
     errors: [],
   };
 }
@@ -338,8 +348,9 @@ function trends(query?: Record<string, unknown>): TrendRepo[] {
   const limit = query?.limit != null ? Number(query.limit) : 10;
   return repos
     .slice()
-    .filter((r) => r.stars >= 1000 && r.star_delta > 0)
-    .sort((a, b) => b.growth_rate - a.growth_rate)
+    .filter((r) => r.stars >= 50 && r.delta_24h >= 10 && r.last_refreshed_at
+      && Date.parse(r.last_refreshed_at) >= Date.now() - 48 * 3600000)
+    .sort((a, b) => b.score - a.score || b.delta_24h - a.delta_24h)
     .slice(0, limit)
     .map((r) => ({
       id: r.id,
@@ -347,6 +358,10 @@ function trends(query?: Record<string, unknown>): TrendRepo[] {
       stars: r.stars,
       star_delta: r.star_delta,
       growth_rate: r.growth_rate,
+      delta_24h: r.delta_24h,
+      delta_7d: r.delta_7d,
+      score: r.score,
+      acceleration: r.delta_24h / Math.max(r.delta_7d / 7, 1),
       language: r.language,
     }));
 }

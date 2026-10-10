@@ -84,7 +84,7 @@ export default function RepoRow({ repo, onOpen, onToggleBookmark, onDelete }: Pr
       {/* growth / delta */}
       <td className="col-num">
         <span className={growthClass}>{formatPercent(repo.growth_rate, 1, locale)}</span>
-        <div className={`muted ${styles.deltaSmall}`}>{formatDelta(repo.star_delta, locale)}</div>
+        <div className={`muted ${styles.deltaSmall}`}>{formatDelta(repo.delta_24h, locale)}</div>
       </td>
 
       {/* delete */}

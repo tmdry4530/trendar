@@ -145,7 +145,7 @@ export const ko = {
     },
     movers: {
       title: '빠르게 성장 중',
-      subtitle: '스타 1,000개 이상 · 최근 증가율이 높은 순서',
+      subtitle: '최근 갱신된 프로젝트 · 24시간 성장 점수 순서',
     },
     saved: {
       title: '관심 프로젝트',
@@ -243,7 +243,7 @@ export const ko = {
       language: '언어',
       stars: '스타',
       growth: '최근 성장',
-      growthHelp: '직전 수집 때보다 스타가 얼마나 늘었는지 보여줍니다. 지금 얼마나 빠르게 성장하는지 비교할 수 있습니다.',
+      growthHelp: '24시간 기준 스타 증가량과 증가율입니다. 정렬은 증가량과 프로젝트 규모를 함께 반영하며, 기록이 짧으면 시간 비례로 추정합니다.',
       growthHelpLabel: '최근 성장 설명',
     },
     count: '총 {{total}}개 ({{start}}~{{end}})',

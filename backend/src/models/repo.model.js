@@ -1,4 +1,5 @@
 import { pool } from '../config/db.js';
+import { trendRankMinStars, trendRankMinDelta } from '../utils/limits.js';
 
 function toRepo(r) {
   return {
@@ -7,7 +8,17 @@ function toRepo(r) {
     stars: Number(r.stars),
     star_delta: Number(r.star_delta),
     growth_rate: Number(r.growth_rate),
+    delta_24h: Number(r.delta_24h ?? 0),
+    delta_7d: Number(r.delta_7d ?? 0),
+    score: Number(r.score ?? 0),
   };
+}
+
+// 정렬 키 → ORDER BY. 'growth'는 순수 비율 편향을 피하려 랭킹 v3 점수로 매핑한다.
+export function orderByForSort(sort) {
+  if (sort === 'score' || sort === 'growth') return 'score DESC, delta_24h DESC';
+  if (sort === 'recent') return 'first_seen_at DESC';
+  return 'stars DESC';
 }
 
 export async function findMany(userId, { query_id, bookmarked, search, sort = 'stars', limit = 30, offset = 0 }) {
@@ -16,10 +27,11 @@ export async function findMany(userId, { query_id, bookmarked, search, sort = 's
   if (bookmarked) { where.push('is_bookmarked = 1'); }
   if (search) { where.push('(full_name LIKE ? OR description LIKE ?)'); vals.push(`%${search}%`, `%${search}%`); }
   const whereSql = `WHERE ${where.join(' AND ')}`;
-  const orderSql = sort === 'growth' ? 'growth_rate DESC' : sort === 'recent' ? 'first_seen_at DESC' : 'stars DESC';
+  const orderSql = orderByForSort(sort);
   const [[{ total }]] = await pool.query(`SELECT COUNT(*) AS total FROM repos ${whereSql}`, vals);
   const [rows] = await pool.query(
-    `SELECT id, github_id, query_id, full_name, owner, name, html_url, description, language, stars, star_delta, growth_rate, is_bookmarked, note
+    `SELECT id, github_id, query_id, full_name, owner, name, html_url, description, language, stars, star_delta, growth_rate,
+            delta_24h, delta_7d, score, last_refreshed_at, is_bookmarked, note
      FROM repos ${whereSql} ORDER BY ${orderSql} LIMIT ? OFFSET ?`,
     [...vals, Number(limit), Number(offset)]
   );
@@ -77,18 +89,37 @@ export async function stats(userId) {
   };
 }
 
-// 성장률 상위 — 1,000스타 미만과 정체 레포는 제외한 뒤 증가율로 정렬한다.
-export function buildTrendsQuery(userId, limit = 10) {
+// 빠르게 성장 중 (랭킹 v3) — 24시간 정규화 증가량 기반 점수로 정렬한다.
+// 48시간 넘게 갱신되지 않은 레포는 델타가 낡았으므로 제외한다.
+// acceleration = 오늘 증가량 / 지난 7일 일평균 (1 미만 분모는 1로 고정).
+export function buildTrendsQuery(userId, limit = 10, { minStars = trendRankMinStars(), minDelta = trendRankMinDelta() } = {}) {
   return {
-    sql: 'SELECT id, full_name, stars, star_delta, growth_rate, language FROM repos WHERE user_id = ? AND stars >= 1000 AND star_delta > 0 ORDER BY growth_rate DESC, star_delta DESC LIMIT ?',
-    params: [userId, Number(limit)],
+    sql: `SELECT id, full_name, stars, star_delta, growth_rate, delta_24h, delta_7d, score,
+                 delta_24h / GREATEST(delta_7d / 7, 1) AS acceleration, language
+          FROM repos
+          WHERE user_id = ?
+            AND stars >= ?
+            AND delta_24h >= ?
+            AND last_refreshed_at >= DATE_SUB(NOW(), INTERVAL 48 HOUR)
+          ORDER BY score DESC, delta_24h DESC
+          LIMIT ?`,
+    params: [userId, Number(minStars), Number(minDelta), Number(limit)],
   };
 }
 
 export async function trends(userId, limit = 10) {
   const { sql, params } = buildTrendsQuery(userId, limit);
   const [rows] = await pool.query(sql, params);
-  return rows.map((r) => ({ ...r, stars: Number(r.stars), star_delta: Number(r.star_delta), growth_rate: Number(r.growth_rate) }));
+  return rows.map((r) => ({
+    ...r,
+    stars: Number(r.stars),
+    star_delta: Number(r.star_delta),
+    growth_rate: Number(r.growth_rate),
+    delta_24h: Number(r.delta_24h),
+    delta_7d: Number(r.delta_7d),
+    score: Number(r.score),
+    acceleration: Number(r.acceleration),
+  }));
 }
 
 export function buildRisingQuery(userId, { windowDays, minDelta, limit }) {

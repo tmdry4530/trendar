@@ -1,9 +1,10 @@
 import { pool } from '../config/db.js';
+import { migrateRankingV3 } from './ranking-v3.js';
 
 // 레거시(단일 테넌트) 스키마 감지 시 격리 전 테이블을 정리한다.
 // users 테이블이 없는데 repos 테이블이 이미 존재하면 v1 레거시로 간주한다.
-async function dropLegacySchema() {
-  const [rows] = await pool.query(
+async function dropLegacySchema(db) {
+  const [rows] = await db.query(
     `SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME IN ('users', 'repos')`
   );
@@ -11,49 +12,49 @@ async function dropLegacySchema() {
   const isLegacy = !tableNames.has('users') && tableNames.has('repos');
   if (!isLegacy) return;
 
-  await pool.query('DROP TABLE IF EXISTS repo_snapshots');
-  await pool.query('DROP TABLE IF EXISTS repos');
-  await pool.query('DROP TABLE IF EXISTS watch_queries');
+  await db.query('DROP TABLE IF EXISTS repo_snapshots');
+  await db.query('DROP TABLE IF EXISTS repos');
+  await db.query('DROP TABLE IF EXISTS watch_queries');
 }
 
 // v2 users 테이블에 이후 추가된 컬럼을 채운다. 이미 있으면 아무것도 하지 않는다.
-async function migrateUsersColumns() {
-  const [rows] = await pool.query(
+async function migrateUsersColumns(db) {
+  const [rows] = await db.query(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
   );
   if (rows.length === 0) return; // users 자체가 없으면 CREATE가 최신 스키마로 만든다
   const columns = new Set(rows.map((row) => row.COLUMN_NAME));
   if (!columns.has('manual_etl_date')) {
-    await pool.query('ALTER TABLE users ADD COLUMN manual_etl_date DATE AFTER token_invalid');
+    await db.query('ALTER TABLE users ADD COLUMN manual_etl_date DATE AFTER token_invalid');
   }
   if (!columns.has('manual_etl_count')) {
-    await pool.query(
+    await db.query(
       'ALTER TABLE users ADD COLUMN manual_etl_count INT NOT NULL DEFAULT 0 AFTER manual_etl_date'
     );
   }
 }
 
 // v2 repos 테이블에 이후 추가된 컬럼을 채운다. 이미 있으면 아무것도 하지 않는다.
-async function migrateReposColumns() {
-  const [rows] = await pool.query(
+async function migrateReposColumns(db) {
+  const [rows] = await db.query(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'repos'`
   );
   if (rows.length === 0) return; // repos 자체가 없으면 CREATE가 최신 스키마로 만든다
   const columns = new Set(rows.map((row) => row.COLUMN_NAME));
   if (!columns.has('github_created_at')) {
-    await pool.query('ALTER TABLE repos ADD COLUMN github_created_at DATETIME NULL AFTER growth_rate');
-    await pool.query('ALTER TABLE repos ADD KEY idx_user_created (user_id, github_created_at)');
+    await db.query('ALTER TABLE repos ADD COLUMN github_created_at DATETIME NULL AFTER growth_rate');
+    await db.query('ALTER TABLE repos ADD KEY idx_user_created (user_id, github_created_at)');
   }
+  await migrateRankingV3(db);
 }
 
-export async function initDb() {
-  await dropLegacySchema();
-  await migrateUsersColumns();
-  await migrateReposColumns();
+export async function initDb(db = pool) {
+  await dropLegacySchema(db);
+  await migrateUsersColumns(db);
 
-  await pool.query(`CREATE TABLE IF NOT EXISTS users (
+  await db.query(`CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
     github_id BIGINT NOT NULL,
     login VARCHAR(100) NOT NULL,
@@ -70,7 +71,7 @@ export async function initDb() {
     UNIQUE KEY uq_github_id (github_id)
   )`);
 
-  await pool.query(`CREATE TABLE IF NOT EXISTS sessions (
+  await db.query(`CREATE TABLE IF NOT EXISTS sessions (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     token_hash CHAR(64) NOT NULL,
@@ -81,7 +82,7 @@ export async function initDb() {
     CONSTRAINT fk_session_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )`);
 
-  await pool.query(`CREATE TABLE IF NOT EXISTS watch_queries (
+  await db.query(`CREATE TABLE IF NOT EXISTS watch_queries (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     query VARCHAR(200) NOT NULL,
@@ -92,10 +93,11 @@ export async function initDb() {
     CONSTRAINT fk_query_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   )`);
 
-  await pool.query(`CREATE TABLE IF NOT EXISTS repos (
+  await db.query(`CREATE TABLE IF NOT EXISTS repos (
     id INT AUTO_INCREMENT PRIMARY KEY,
     user_id INT NOT NULL,
     github_id BIGINT NOT NULL,
+    node_id VARCHAR(100) NULL,
     query_id INT NOT NULL,
     full_name VARCHAR(255) NOT NULL,
     owner VARCHAR(120),
@@ -106,6 +108,10 @@ export async function initDb() {
     stars INT DEFAULT 0,
     star_delta INT DEFAULT 0,
     growth_rate DOUBLE DEFAULT 0,
+    delta_24h INT NOT NULL DEFAULT 0,
+    delta_7d INT NOT NULL DEFAULT 0,
+    score DOUBLE NOT NULL DEFAULT 0,
+    last_refreshed_at DATETIME NULL,
     github_created_at DATETIME NULL,
     note TEXT,
     is_bookmarked BOOLEAN NOT NULL DEFAULT FALSE,
@@ -116,11 +122,13 @@ export async function initDb() {
     KEY idx_stars (stars),
     KEY idx_growth (growth_rate),
     KEY idx_user_created (user_id, github_created_at),
+    KEY idx_user_score (user_id, score),
+    KEY idx_user_refreshed (user_id, last_refreshed_at),
     CONSTRAINT fk_repo_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     CONSTRAINT fk_repo_query FOREIGN KEY (query_id) REFERENCES watch_queries(id) ON DELETE CASCADE
   )`);
 
-  await pool.query(`CREATE TABLE IF NOT EXISTS repo_snapshots (
+  await db.query(`CREATE TABLE IF NOT EXISTS repo_snapshots (
     id INT AUTO_INCREMENT PRIMARY KEY,
     repo_id INT NOT NULL,
     stars INT,
@@ -131,4 +139,7 @@ export async function initDb() {
     KEY idx_repo_time (repo_id, captured_at),
     CONSTRAINT fk_snap_repo FOREIGN KEY (repo_id) REFERENCES repos(id) ON DELETE CASCADE
   )`);
+
+  // Snapshot backfill requires repo_snapshots, including after interrupted initial setup.
+  await migrateReposColumns(db);
 }
