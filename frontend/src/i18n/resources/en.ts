@@ -148,7 +148,7 @@ export const en = {
     },
     movers: {
       title: 'Growing quickly',
-      subtitle: '1,000+ stars · highest recent growth rate',
+      subtitle: 'Recently refreshed · ranked by 24-hour growth score',
     },
     saved: {
       title: 'Saved projects',
@@ -246,7 +246,7 @@ export const en = {
       language: 'Language',
       stars: 'Stars',
       growth: 'Recent growth',
-      growthHelp: 'Shows how many stars were added since the previous collection. Use it to compare which projects are growing fastest now.',
+      growthHelp: 'Estimated 24-hour star growth. Ranking balances the gain with project size; short histories are extrapolated.',
       growthHelpLabel: 'Recent growth details',
     },
     count: '{{total}} total ({{start}}–{{end}})',
