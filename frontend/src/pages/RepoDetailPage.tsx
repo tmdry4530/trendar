@@ -202,13 +202,13 @@ export default function RepoDetailPage() {
                   {formatPercent(repo.growth_rate, 1, locale)}
                 </span>
               )}
-              {repo.star_delta !== 0 && (
+              {repo.delta_24h !== 0 && (
                 <span
                   className={`pill ${
-                    repo.star_delta > 0 ? styles.deltaUp : styles.deltaDown
+                    repo.delta_24h > 0 ? styles.deltaUp : styles.deltaDown
                   }`}
                 >
-                  {t('dashboard.table.increase')} {formatStars(Math.abs(repo.star_delta), locale)}
+                  {t('dashboard.table.increase24h')} {formatStars(Math.abs(repo.delta_24h), locale)}
                 </span>
               )}
             </div>
