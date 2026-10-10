@@ -40,10 +40,14 @@ export interface Repo {
   stars: number;
   star_delta: number;
   growth_rate: number;
+  delta_24h: number;
+  delta_7d: number;
+  score: number;
   is_bookmarked: boolean;
   note?: string | null;
   first_seen_at?: string;
   updated_at?: string;
+  last_refreshed_at: string | null;
 }
 
 /** repo_snapshots 시계열 1점 */
@@ -67,7 +71,7 @@ export interface RepoDetailResult {
   snapshots: Snapshot[];
 }
 
-export type RepoSort = 'stars' | 'growth' | 'recent';
+export type RepoSort = 'stars' | 'growth' | 'score' | 'recent';
 
 /** GET /api/repos 쿼리 파라미터 */
 export interface RepoQueryParams {
@@ -100,7 +104,11 @@ export interface TrendRepo {
   stars: number;
   star_delta: number;
   growth_rate: number;
+  delta_24h: number;
+  delta_7d: number;
+  score: number;
   language: string | null;
+  acceleration: number;
 }
 
 /** GET /api/rising 항목 (신생 급상승) */
@@ -137,6 +145,8 @@ export interface EtlRunResult {
   repos_upserted: number;
   snapshots_inserted: number;
   repos_skipped: number;
+  repos_refreshed: number;
+  refresh_skipped_no_node_id: number;
   errors: string[];
 }
 
