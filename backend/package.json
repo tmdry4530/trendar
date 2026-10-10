@@ -8,7 +8,8 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "etl": "node src/etl/pipeline.js",
-    "test": "node --test test/**/*.test.js"
+    "test": "node --test test/**/*.test.js",
+    "migrate:ranking-v3": "node src/db/migrate-ranking-v3.js"
   },
   "dependencies": {
     "@octokit/rest": "^21.0.2",
