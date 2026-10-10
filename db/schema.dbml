@@ -57,6 +57,7 @@ Table repos {
   id             int          [pk, increment]
   user_id        int          [not null]
   github_id      bigint       [not null]
+  node_id        varchar(100) [note: 'GraphQL 전역 ID (Search API node_id) — 추적 레포 배치 갱신용']
   query_id       int          [not null]
   full_name      varchar(255) [not null]
   owner          varchar(120)
@@ -66,7 +67,11 @@ Table repos {
   language       varchar(50)
   stars          int          [default: 0]
   star_delta     int          [default: 0]
-  growth_rate    double       [default: 0]
+  growth_rate    double       [default: 0, note: '하위호환: delta_24h / max(24시간 전 스타, 1)']
+  delta_24h      int          [not null, default: 0, note: '24시간 정규화 스타 증가량']
+  delta_7d       int          [not null, default: 0, note: '7일 정규화 스타 증가량']
+  score          double       [not null, default: 0, note: 'delta_24h / sqrt(max(stars - delta_24h, 10))']
+  last_refreshed_at datetime  [note: '마지막 스냅샷 갱신 시각 (검색 적중·추적 갱신)']
   github_created_at datetime  [note: 'GitHub 레포 생성 시각 (Search API created_at)']
   note           text
   is_bookmarked  boolean      [not null, default: false]
@@ -79,6 +84,8 @@ Table repos {
     stars                       [name: 'idx_stars']
     growth_rate                 [name: 'idx_growth', note: 'trends 정렬용']
     (user_id, github_created_at) [name: 'idx_user_created', note: 'rising 조회(사용자+생성일 범위 스캔)']
+    (user_id, score)            [name: 'idx_user_score', note: 'trends(랭킹 v3) 정렬']
+    (user_id, last_refreshed_at) [name: 'idx_user_refreshed', note: '추적 레포 갱신 대상 조회']
   }
 }
 

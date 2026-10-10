@@ -58,6 +58,7 @@ CREATE TABLE repos (
   id              INT            NOT NULL AUTO_INCREMENT,
   user_id         INT            NOT NULL,
   github_id       BIGINT         NOT NULL,
+  node_id         VARCHAR(100)   NULL,  -- GraphQL 전역 ID (Search API node_id) — 추적 레포 배치 갱신용
   query_id        INT            NOT NULL,
   full_name       VARCHAR(255)   NOT NULL,
   owner           VARCHAR(120),
@@ -67,7 +68,11 @@ CREATE TABLE repos (
   language        VARCHAR(50),
   stars           INT            DEFAULT 0,
   star_delta      INT            DEFAULT 0,
-  growth_rate     DOUBLE         DEFAULT 0,
+  growth_rate     DOUBLE         DEFAULT 0,          -- 하위호환: delta_24h / max(24시간 전 스타, 1)
+  delta_24h       INT            NOT NULL DEFAULT 0, -- 24시간 정규화 스타 증가량
+  delta_7d        INT            NOT NULL DEFAULT 0, -- 7일 정규화 스타 증가량
+  score           DOUBLE         NOT NULL DEFAULT 0, -- delta_24h / sqrt(max(stars - delta_24h, 10))
+  last_refreshed_at DATETIME     NULL,               -- 마지막 스냅샷 갱신 시각 (검색 적중·추적 갱신)
   github_created_at DATETIME     NULL,  -- GitHub 레포 생성 시각 (Search API created_at)
   note            TEXT,
   is_bookmarked   BOOLEAN        NOT NULL DEFAULT FALSE,
@@ -79,6 +84,8 @@ CREATE TABLE repos (
   KEY idx_stars   (stars),
   KEY idx_growth  (growth_rate),        -- trends 정렬에 사용되는 인덱스
   KEY idx_user_created (user_id, github_created_at), -- rising 조회(사용자+생성일 범위 스캔)
+  KEY idx_user_score (user_id, score),               -- trends(랭킹 v3) 정렬
+  KEY idx_user_refreshed (user_id, last_refreshed_at), -- 추적 레포 갱신 대상 조회
   CONSTRAINT fk_repo_user
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
   CONSTRAINT fk_repo_query
