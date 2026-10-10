@@ -7,6 +7,9 @@ const DEFAULT_TREND_WINDOW_DAYS = 90;
 const DEFAULT_TREND_MIN_STARS = 50;
 const DEFAULT_RISING_WINDOW_DAYS = 15;
 const DEFAULT_RISING_MIN_DELTA = 500;
+const DEFAULT_TREND_RANK_MIN_STARS = 50;
+const DEFAULT_TREND_RANK_MIN_DELTA = 10;
+const DEFAULT_TRACKED_REFRESH_DAYS = 14;
 
 export function maxQueriesPerUser() {
   const raw = process.env.MAX_QUERIES_PER_USER;
@@ -42,6 +45,26 @@ export function risingWindowDays() {
 export function risingMinDelta() {
   const parsed = Number(process.env.RISING_MIN_DELTA);
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_RISING_MIN_DELTA;
+  return parsed;
+}
+
+// 랭킹 v3 — '빠르게 성장 중' 노출 하한 (스타 수 / 24시간 증가량). 0 허용.
+export function trendRankMinStars() {
+  const parsed = Number(process.env.TREND_RANK_MIN_STARS);
+  if (process.env.TREND_RANK_MIN_STARS === undefined || !Number.isInteger(parsed) || parsed < 0) return DEFAULT_TREND_RANK_MIN_STARS;
+  return parsed;
+}
+
+export function trendRankMinDelta() {
+  const parsed = Number(process.env.TREND_RANK_MIN_DELTA);
+  if (process.env.TREND_RANK_MIN_DELTA === undefined || !Number.isInteger(parsed) || parsed < 0) return DEFAULT_TREND_RANK_MIN_DELTA;
+  return parsed;
+}
+
+// 검색 top-N에서 빠진 추적 레포를 몇 일 동안 계속 갱신할지 (last_refreshed_at 기준).
+export function trackedRefreshDays() {
+  const parsed = Number(process.env.TRACKED_REFRESH_DAYS);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_TRACKED_REFRESH_DAYS;
   return parsed;
 }
 
