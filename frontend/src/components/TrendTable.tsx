@@ -1,4 +1,4 @@
-// TrendTable.tsx — 상승 레포 테이블 (star delta 기준 상위 N)
+// TrendTable.tsx — 상승 레포 테이블 (ranking score 기준 상위 N)
 import { useNavigate, Link } from 'react-router-dom';
 import type { TrendRepo } from '../types';
 import { formatStars, formatDelta, formatPercent } from '../lib/format';
@@ -44,16 +44,16 @@ export default function TrendTable({ data, loading, error, onRetry, compact = fa
           <th>{t('dashboard.table.project')}</th>
           {!compact && <th>{t('dashboard.table.language')}</th>}
           <th className="col-num">{t('dashboard.table.stars')}</th>
-          <th className="col-num">{t('dashboard.table.increase')}</th>
+          <th className="col-num">{t('dashboard.table.increase24h')}</th>
           <th className="col-num">{t('dashboard.table.growth')}</th>
         </tr>
       </thead>
       <tbody>
         {data.map((repo) => {
           const deltaClass =
-            repo.star_delta > 0
+            repo.delta_24h > 0
               ? 'delta delta--up'
-              : repo.star_delta < 0
+              : repo.delta_24h < 0
                 ? 'delta delta--down'
                 : 'delta delta--flat';
 
@@ -75,7 +75,7 @@ export default function TrendTable({ data, loading, error, onRetry, compact = fa
                 <span className="stars">★ {formatStars(repo.stars, locale)}</span>
               </td>
               <td className="col-num">
-                <span className={deltaClass}>{formatDelta(repo.star_delta, locale)}</span>
+                <span className={deltaClass}>{formatDelta(repo.delta_24h, locale)}</span>
               </td>
               <td className="col-num">
                 <span className={styles.growthRate}>{formatPercent(repo.growth_rate, 1, locale)}</span>
