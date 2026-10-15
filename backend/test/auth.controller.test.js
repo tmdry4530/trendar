@@ -167,16 +167,20 @@ test('deleteAccount: users.deleteById(req.user.id) 호출 + sid 삭제', async (
   assert.deepEqual(res.body, { ok: true, data: null });
 });
 
-test('me: { user: { login, name, avatarUrl }, tokenInvalid } 형태로 응답', () => {
-  const ctrl = createAuthController({ oauth: {}, users: {}, sessions: {}, crypto: stubCrypto() });
-  const req = { user: { login: 'octocat', name: 'Octo', avatar_url: 'http://a/x.png', token_invalid: true } };
+test('me: { user: { login, name, avatarUrl }, tokenInvalid, plan } 형태로 응답', async () => {
+  const ctrl = createAuthController({
+    oauth: {}, users: {}, sessions: {}, crypto: stubCrypto(),
+    effectivePlan: async () => 'pro',
+  });
+  const req = { user: { id: 7, login: 'octocat', name: 'Octo', avatar_url: 'http://a/x.png', token_invalid: true } };
   const res = mockRes();
-  ctrl.me(req, res);
+  await ctrl.me(req, res);
   assert.deepEqual(res.body, {
     ok: true,
     data: {
       user: { login: 'octocat', name: 'Octo', avatarUrl: 'http://a/x.png' },
       tokenInvalid: true,
+      plan: 'pro',
     },
   });
 });

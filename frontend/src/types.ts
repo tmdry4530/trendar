@@ -171,4 +171,5 @@ export interface AuthUser {
 export interface Me {
   user: AuthUser;
   tokenInvalid: boolean;
+  plan: 'free' | 'pro';
 }

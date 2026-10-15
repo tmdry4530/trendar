@@ -48,10 +48,46 @@ async function migrateReposColumns() {
   }
 }
 
+// Paddle 구독 스키마: subscriptions + paddle_events 테이블, users.plan 컬럼.
+// CREATE는 최신 스키마로, 기존 DB는 ALTER로 채운다.
+async function migrateBillingSchema() {
+  const [userCols] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'users'`
+  );
+  const columns = new Set(userCols.map((row) => row.COLUMN_NAME));
+  if (columns.size > 0 && !columns.has('plan')) {
+    await pool.query(
+      `ALTER TABLE users ADD COLUMN plan ENUM('free','pro') NOT NULL DEFAULT 'free' AFTER manual_etl_count`
+    );
+  }
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS subscriptions (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    paddle_subscription_id VARCHAR(64) NOT NULL,
+    paddle_customer_id VARCHAR(64) NULL,
+    status VARCHAR(32) NOT NULL,
+    price_id VARCHAR(64) NULL,
+    current_period_end DATETIME NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_user (user_id),
+    UNIQUE KEY uq_paddle_sub (paddle_subscription_id),
+    CONSTRAINT fk_sub_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS paddle_events (
+    event_id VARCHAR(64) PRIMARY KEY,
+    received_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`);
+}
+
 export async function initDb() {
   await dropLegacySchema();
   await migrateUsersColumns();
   await migrateReposColumns();
+  await migrateBillingSchema();
 
   await pool.query(`CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -63,6 +99,7 @@ export async function initDb() {
     token_invalid BOOLEAN NOT NULL DEFAULT FALSE,
     manual_etl_date DATE,
     manual_etl_count INT NOT NULL DEFAULT 0,
+    plan ENUM('free','pro') NOT NULL DEFAULT 'free',
     last_etl_at DATETIME,
     last_etl_status ENUM('ok','error','token_invalid'),
     last_etl_message VARCHAR(500),

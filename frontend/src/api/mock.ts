@@ -146,7 +146,7 @@ export async function mockFetch<T>(
 
 // ── auth ────────────────────────────────────────────────────────────────────
 function meResponse(): Me {
-  return { user: { login: 'demo', name: 'Demo User', avatarUrl: null }, tokenInvalid: false };
+  return { user: { login: 'demo', name: 'Demo User', avatarUrl: null }, tokenInvalid: false, plan: 'free' };
 }
 
 // ── queries ─────────────────────────────────────────────────────────────────

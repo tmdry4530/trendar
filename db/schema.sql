@@ -20,12 +20,35 @@ CREATE TABLE users (
   token_invalid     BOOLEAN        NOT NULL DEFAULT FALSE,
   manual_etl_date   DATE,                            -- 마지막 수동 수집의 KST 날짜
   manual_etl_count  INT            NOT NULL DEFAULT 0, -- 그 날짜의 사용 횟수
+  plan              ENUM('free','pro') NOT NULL DEFAULT 'free', -- 표시용 캐시 (정확한 판정은 subscriptions 기준)
   last_etl_at       DATETIME,
   last_etl_status   ENUM('ok','error','token_invalid'),
   last_etl_message  VARCHAR(500),
   created_at        TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
   UNIQUE KEY uq_github_id (github_id)
+);
+
+CREATE TABLE subscriptions (
+  id                    INT            NOT NULL AUTO_INCREMENT,
+  user_id               INT            NOT NULL,              -- 구독 소유자
+  paddle_subscription_id VARCHAR(64)   NOT NULL,              -- Paddle sub_xxx
+  paddle_customer_id    VARCHAR(64),                          -- Paddle ctm_xxx
+  status                VARCHAR(32)    NOT NULL,              -- active/trialing/past_due/canceled/...
+  price_id              VARCHAR(64),                         -- Paddle pri_xxx
+  current_period_end    DATETIME,                            -- canceled여도 이 시점까지 Pro 유지
+  created_at            TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at            TIMESTAMP      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  UNIQUE KEY uq_user (user_id),
+  UNIQUE KEY uq_paddle_sub (paddle_subscription_id),
+  CONSTRAINT fk_sub_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE paddle_events (
+  event_id    VARCHAR(64)  NOT NULL, -- 웹훅 멱등 키
+  received_at TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (event_id)
 );
 
 CREATE TABLE sessions (

@@ -3,14 +3,17 @@ import { runPipelineForUser, isRunning } from '../etl/pipeline.js';
 import * as usersModel from '../models/user.model.js';
 import { httpError } from '../middleware/errorHandler.js';
 import { maxManualEtlPerDay } from '../utils/limits.js';
+import { effectivePlan } from '../services/billing.js';
 import { kstToday, kstNextMidnight } from '../utils/kst.js';
 
 export function createEtlController(deps) {
   const { pipeline, users, limit, clock } = deps;
+  // 요금제 조회 (DI 미주입 시 free로 폴백 — 기존 테스트 호환).
+  const planOf = deps.plan || (async () => 'free');
 
   async function run(req, res, next) {
     const today = kstToday(clock());
-    const max = limit();
+    const max = limit(await planOf(req.user.id));
     try {
       // 잘못된 query_id는 한도를 소비하기 전에 400으로 막는다 (NaN이 전체 실행으로 새는 것 방지).
       let queryId;
@@ -49,7 +52,7 @@ export function createEtlController(deps) {
     try {
       const now = clock();
       const today = kstToday(now);
-      const max = limit();
+      const max = limit(await planOf(req.user.id));
       const user = await users.findById(req.user.id);
       const used = users.manualUsageFromRow(user, today);
       res.json({ ok: true, data: {
@@ -80,5 +83,6 @@ export const { run, status } = createEtlController({
   pipeline: { runPipelineForUser, isRunning },
   users: usersModel,
   limit: maxManualEtlPerDay,
+  plan: effectivePlan,
   clock: () => new Date(),
 });
