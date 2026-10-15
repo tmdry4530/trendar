@@ -5,6 +5,7 @@ import * as usersModel from '../models/user.model.js';
 import * as sessionsModel from '../models/session.model.js';
 import { encryptToken, newSessionToken, hashSessionToken } from '../utils/crypto.js';
 import { SESSION_COOKIE } from '../middleware/requireAuth.js';
+import { effectivePlan } from '../services/billing.js';
 
 const OAUTH_STATE_COOKIE = 'oauth_state';
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -22,6 +23,7 @@ function cookieOpts(maxAge) {
 
 export function createAuthController(deps) {
   const { oauth, users, sessions, crypto } = deps;
+  const planOf = deps.effectivePlan || effectivePlan;
 
   function login(req, res) {
     const state = randomBytes(32).toString('hex');
@@ -89,7 +91,8 @@ export function createAuthController(deps) {
     }
   }
 
-  function me(req, res) {
+  async function me(req, res) {
+    const plan = await planOf(req.user.id).catch(() => 'free');
     res.json({
       ok: true,
       data: {
@@ -99,6 +102,7 @@ export function createAuthController(deps) {
           avatarUrl: req.user.avatar_url,
         },
         tokenInvalid: req.user.token_invalid,
+        plan,
       },
     });
   }
@@ -121,4 +125,5 @@ export default createAuthController({
   users: usersModel,
   sessions: sessionsModel,
   crypto: { encryptToken, newSessionToken, hashSessionToken },
+  effectivePlan,
 });

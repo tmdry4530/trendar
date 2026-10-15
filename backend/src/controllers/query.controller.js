@@ -1,5 +1,6 @@
 import * as Query from '../models/query.model.js';
 import { httpError } from '../middleware/errorHandler.js';
+import { effectivePlan } from '../services/billing.js';
 
 export async function list(req, res, next) {
   try { res.json({ ok: true, data: await Query.findAll(req.user.id) }); }
@@ -13,7 +14,8 @@ export async function create(req, res, next) {
       throw httpError(400, 'VALIDATION_ERROR', '수집 조건은 1~200자로 입력해 주세요.');
     if (!['topic', 'keyword'].includes(query_type))
       throw httpError(400, 'VALIDATION_ERROR', '찾는 방법을 확인해 주세요.');
-    res.status(201).json({ ok: true, data: await Query.create(req.user.id, { query: query.trim(), query_type }) });
+    const plan = await effectivePlan(req.user.id);
+    res.status(201).json({ ok: true, data: await Query.create(req.user.id, { query: query.trim(), query_type }, plan) });
   } catch (e) {
     if (e.code === 'ER_DUP_ENTRY') return next(httpError(409, 'DUPLICATE', '이미 등록된 수집 조건입니다.'));
     next(e);

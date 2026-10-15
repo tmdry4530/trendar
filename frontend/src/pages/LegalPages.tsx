@@ -1,8 +1,12 @@
 // LegalPages.tsx — 공개(비로그인 접근 가능) 가격·약관·개인정보·환불 페이지.
 // Paddle 도메인 심사용. 결제는 Paddle(Merchant of Record)이 처리한다.
 import type { ReactNode } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import styles from './LegalPages.module.css';
+import { useAuth } from '../auth/AuthContext';
+import { createCheckout, openCustomerPortal } from '../api/billing';
+import { ApiError } from '../api/client';
 
 export const LEGAL = {
   product: 'Trendar',
@@ -26,6 +30,61 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
 }
 
 export function PricingPage() {
+  const { status, me, refresh } = useAuth();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const billingResult = searchParams.get('billing');
+
+  useEffect(() => {
+    // 체크아웃에서 돌아오면 플랜 상태를 다시 읽는다 (웹훅 반영 대기).
+    if (billingResult === 'success' && status === 'authed') {
+      const t = setTimeout(() => { refresh().catch(() => {}); }, 3000);
+      return () => clearTimeout(t);
+    }
+  }, [billingResult, status, refresh]);
+
+  const dismissNotice = () => {
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.delete('billing');
+      return next;
+    }, { replace: true });
+  };
+
+  const startCheckout = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { checkout_url } = await createCheckout();
+      window.location.href = checkout_url;
+    } catch (e) {
+      if (e instanceof ApiError && e.code === 'ALREADY_PRO') {
+        refresh().catch(() => {});
+        setError('이미 Pro를 이용 중입니다.');
+      } else if (e instanceof ApiError && e.code === 'BILLING_NOT_CONFIGURED') {
+        setError('결제 설정이 아직 준비 중입니다. 잠시 후 다시 시도해 주세요.');
+      } else {
+        setError(e instanceof Error ? e.message : '체크아웃을 열 수 없습니다.');
+      }
+      setBusy(false);
+    }
+  };
+
+  const openPortal = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      const { portal_url } = await openCustomerPortal();
+      window.location.href = portal_url;
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '구독 관리 페이지를 열 수 없습니다.');
+      setBusy(false);
+    }
+  };
+
+  const isPro = status === 'authed' && me?.plan === 'pro';
+
   return (
     <article className={styles.page}>
       <Link to="/" className={styles.back}>◎ Trendar</Link>
@@ -34,34 +93,67 @@ export function PricingPage() {
         Trendar is a GitHub trend radar. It tracks fast-rising open-source repositories for the
         keywords, topics and languages you care about, and shows star growth over time.
       </p>
+      {billingResult === 'success' && (
+        <p className={styles.note} role="status">
+          결제가 완료되었습니다. 구독이 확인되는 대로 Pro가 적용됩니다. (잠시 후 새로고침){' '}
+          <button type="button" className="btn btn--sm" onClick={dismissNotice}>닫기</button>
+        </p>
+      )}
+      {billingResult === 'cancelled' && (
+        <p className={styles.note} role="status">
+          결제가 취소되었습니다. 언제든 다시 업그레이드할 수 있습니다.{' '}
+          <button type="button" className="btn btn--sm" onClick={dismissNotice}>닫기</button>
+        </p>
+      )}
+      {error && (
+        <p className={styles.note} role="alert">{error}</p>
+      )}
       <div className={styles.plans}>
         <section className={`panel ${styles.plan}`}>
           <h2>Free</h2>
           <div className={styles.price}>$0</div>
           <ul>
             <li>Rising repositories dashboard</li>
-            <li>Saved search queries (keywords, topics, languages)</li>
+            <li>Up to 10 saved search queries</li>
+            <li>10 manual collections per day</li>
             <li>Star history charts</li>
             <li>Bookmarks</li>
           </ul>
-          <a href="/api/auth/github" className="btn">Start free with GitHub</a>
+          {status !== 'authed' && (
+            <a href="/api/auth/github" className="btn">Start free with GitHub</a>
+          )}
         </section>
         <section className={`panel ${styles.plan} ${styles.featured}`}>
           <h2>Trendar Pro</h2>
           <div className={styles.price}>$9.99<span> / month</span></div>
           <ul>
             <li>Everything in Free</li>
-            <li>More saved queries and higher collection limits</li>
-            <li>Email trend digests and rising-repo alerts</li>
-            <li>Unlimited snapshot history and CSV export</li>
+            <li>Up to 50 saved queries</li>
+            <li>100 manual collections per day</li>
             <li>Priority support</li>
           </ul>
-          <a href="/api/auth/github" className="btn btn--primary">Sign in to upgrade</a>
+          {status === 'authed' ? (
+            isPro ? (
+              <>
+                <p className={styles.note}>현재 Pro를 이용 중입니다.</p>
+                <button type="button" className="btn" onClick={openPortal} disabled={busy}>
+                  {busy ? '여는 중…' : '구독 관리·취소'}
+                </button>
+              </>
+            ) : (
+              <button type="button" className="btn btn--primary" onClick={startCheckout} disabled={busy}>
+                {busy ? '여는 중…' : 'Pro로 업그레이드'}
+              </button>
+            )
+          ) : (
+            <a href="/api/auth/github" className="btn btn--primary">Sign in to upgrade</a>
+          )}
         </section>
       </div>
       <p className={styles.note}>
         Prices in USD. Taxes may apply depending on your location. Pro renews monthly until
-        cancelled; you can cancel anytime. See our <Link to="/refund">Refund Policy</Link>.
+        cancelled; you can cancel anytime from the subscription portal. See our{' '}
+        <Link to="/refund">Refund Policy</Link>.
         Payments are processed by Paddle.com, our Merchant of Record.
       </p>
     </article>

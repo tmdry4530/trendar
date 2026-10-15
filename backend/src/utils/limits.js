@@ -8,14 +8,24 @@ const DEFAULT_TREND_MIN_STARS = 50;
 const DEFAULT_RISING_WINDOW_DAYS = 15;
 const DEFAULT_RISING_MIN_DELTA = 500;
 
-export function maxQueriesPerUser() {
+export function maxQueriesPerUser(plan = 'free') {
+  if (plan === 'pro') {
+    const parsed = Number(process.env.PRO_MAX_QUERIES_PER_USER);
+    if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    return 50;
+  }
   const raw = process.env.MAX_QUERIES_PER_USER;
   const parsed = Number(raw);
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_MAX_QUERIES_PER_USER;
   return parsed;
 }
 
-export function maxManualEtlPerDay() {
+export function maxManualEtlPerDay(plan = 'free') {
+  if (plan === 'pro') {
+    const parsed = Number(process.env.PRO_MAX_MANUAL_ETL_PER_DAY);
+    if (Number.isInteger(parsed) && parsed > 0) return parsed;
+    return 100;
+  }
   const parsed = Number(process.env.MAX_MANUAL_ETL_PER_DAY);
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_MAX_MANUAL_ETL_PER_DAY;
   return parsed;
@@ -45,9 +55,9 @@ export function risingMinDelta() {
   return parsed;
 }
 
-export function assertQueryLimit(currentCount) {
-  const max = maxQueriesPerUser();
+export function assertQueryLimit(currentCount, plan = 'free') {
+  const max = maxQueriesPerUser(plan);
   if (currentCount >= max) {
-    throw httpError(400, 'QUERY_LIMIT_EXCEEDED', `수집 조건은 사용자당 최대 ${max}개까지 등록할 수 있습니다.`);
+    throw httpError(400, 'QUERY_LIMIT_EXCEEDED', `수집 조건은 ${plan === 'pro' ? 'Pro ' : ''}사용자당 최대 ${max}개까지 등록할 수 있습니다.`);
   }
 }
