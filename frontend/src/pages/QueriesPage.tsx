@@ -1,7 +1,10 @@
 // QueriesPage.tsx — 검색 조건(WatchQuery) CRUD 페이지.
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { listQueries, updateQuery, deleteQuery } from '../api/queries';
 import { runEtl, getEtlStatus } from '../api/stats';
+import { ApiError } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 import { useAsync } from '../lib/useAsync';
 import { formatInt, formatDate } from '../lib/format';
 import { useToast } from '../components/Toast';
@@ -33,6 +36,7 @@ interface DeleteState {
 
 export default function QueriesPage() {
   const toast = useToast();
+  const { me } = useAuth();
   const { t, i18n } = useTranslation();
   const locale = toSupportedLocale(i18n.resolvedLanguage) ?? 'en';
   const { data, loading, error, reload } = useAsync<WatchQuery[]>(
@@ -49,6 +53,13 @@ export default function QueriesPage() {
   const quotaTooltip = quotaExhausted
     ? t('queries.quotaExhausted')
     : t('queries.quotaReset');
+
+  // Free 사용자가 한도에 걸리면 업그레이드 안내 (Pro 에게는 표시하지 않음)
+  const [limitHit, setLimitHit] = useState<'query' | 'etl' | null>(null);
+  const upgradeReason = me?.plan === 'pro' ? null : limitHit ?? (quotaExhausted ? 'etl' : null);
+  const noteEtlLimit = (err: unknown) => {
+    if (err instanceof ApiError && err.code === 'ETL_DAILY_LIMIT_EXCEEDED') setLimitHit('etl');
+  };
 
   // Per-row ETL running ids
   const [rowEtlId, setRowEtlId] = useState<number | null>(null);
@@ -83,6 +94,7 @@ export default function QueriesPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('errors.generic');
       toast.error(msg);
+      noteEtlLimit(err);
     } finally {
       setEtlRunning(false);
       reloadEtl(); // 잔여 한도 동기화 (429 포함)
@@ -100,6 +112,7 @@ export default function QueriesPage() {
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : t('errors.generic');
       toast.error(msg);
+      noteEtlLimit(err);
     } finally {
       setRowEtlId(null);
       reloadEtl(); // 잔여 한도 동기화 (429 포함)
@@ -360,7 +373,19 @@ export default function QueriesPage() {
 
       {/* New query form */}
       <div className="stack">
-        <QueryForm onCreated={reload} />
+        {upgradeReason && (
+          <div className={styles.upgradeNotice} role="status">
+            <span>
+              {t(upgradeReason === 'query' ? 'errors.queryLimit' : 'errors.rateLimit')}{' '}
+              {t('queries.limitUpgrade')}
+            </span>
+            <Link to="/account/billing" className="btn btn--primary btn--sm">
+              {t('queries.limitUpgradeLink')}
+            </Link>
+          </div>
+        )}
+
+        <QueryForm onCreated={reload} onLimitExceeded={() => setLimitHit('query')} />
 
         {/* List panel */}
         <div className="panel panel--flush">

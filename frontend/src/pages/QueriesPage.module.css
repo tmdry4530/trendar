@@ -77,6 +77,19 @@
   gap: 6px;
 }
 
+.upgradeNotice {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 11px 14px;
+  border: 1px solid var(--accent-dim);
+  border-radius: var(--radius);
+  background: var(--accent-soft);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
 @media (max-width: 640px) {
   .headerRow {
     align-items: flex-start;
@@ -86,5 +99,10 @@
   .etlControls {
     flex-wrap: wrap;
     width: 100%;
+  }
+
+  .upgradeNotice {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

@@ -10,6 +10,8 @@ import { effectivePlan } from '../services/billing.js';
 import { createSignupAttribution } from '../services/public-analytics.js';
 
 const OAUTH_STATE_COOKIE = 'oauth_state';
+const OAUTH_NEXT_COOKIE = 'oauth_next';
+const LOGIN_NEXT_PATHS = new Set(['/account/billing']);
 const STATE_TTL_MS = 10 * 60 * 1000;
 
 const isProd = () => process.env.NODE_ENV === 'production';
@@ -23,6 +25,10 @@ function cookieOpts(maxAge) {
   return { httpOnly: true, sameSite: 'lax', secure: isProd(), maxAge, path: '/' };
 }
 
+function allowedNext(value) {
+  return typeof value === 'string' && LOGIN_NEXT_PATHS.has(value) ? value : '/';
+}
+
 export function createAuthController(deps) {
   const { oauth, users, sessions, crypto } = deps;
   const planOf = deps.effectivePlan || effectivePlan;
@@ -32,14 +38,22 @@ export function createAuthController(deps) {
   function login(req, res) {
     const state = randomBytes(32).toString('hex');
     res.cookie(OAUTH_STATE_COOKIE, state, cookieOpts(STATE_TTL_MS));
+    const nextPath = allowedNext(req.query.next);
+    if (nextPath !== '/') {
+      res.cookie(OAUTH_NEXT_COOKIE, nextPath, cookieOpts(STATE_TTL_MS));
+    } else {
+      res.clearCookie(OAUTH_NEXT_COOKIE, { path: '/' });
+    }
     attribution.remember(res, { from: req.query.from, locale: req.query.locale });
     res.redirect(oauth.buildAuthorizeUrl({ state }));
   }
 
   async function callback(req, res, next) {
-    // state·진입 경로 쿠키는 결과와 무관하게 1회성으로 소비한다.
+    // OAuth 쿠키는 결과와 무관하게 1회성으로 소비한다.
     const stateCookie = req.cookies?.[OAUTH_STATE_COOKIE];
     res.clearCookie(OAUTH_STATE_COOKIE);
+    const nextPath = allowedNext(req.cookies?.[OAUTH_NEXT_COOKIE]);
+    res.clearCookie(OAUTH_NEXT_COOKIE, { path: '/' });
     const entry = attribution.consume(req, res);
 
     if (req.query.error) return res.redirect('/login?error=denied');
@@ -83,7 +97,7 @@ export function createAuthController(deps) {
           .record(entry)
           .catch((e) => console.error('[auth] attribution failed', e.code ?? e.message));
       }
-      return res.redirect('/');
+      return res.redirect(nextPath);
     } catch (err) {
       return next(err);
     }

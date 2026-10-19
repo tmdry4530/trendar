@@ -29,7 +29,14 @@ test('API 응답에 브라우저 보안 헤더를 설정한다', async () => {
 
   const policy = response.headers.get('content-security-policy') ?? '';
   assert.match(policy, /default-src 'self'/);
-  assert.match(policy, /connect-src 'self'/);
+  const directives = Object.fromEntries(policy.split(';').map((directive) => {
+    const [name, ...sources] = directive.trim().split(/\s+/);
+    return [name, sources];
+  }));
+  assert.deepEqual(directives['script-src'], ["'self'", 'https://cdn.paddle.com']);
+  assert.deepEqual(directives['frame-src'], ['https://buy.paddle.com', 'https://sandbox-buy.paddle.com']);
+  assert.deepEqual(directives['connect-src'], ["'self'", 'https://*.paddle.com']);
+  assert.deepEqual(directives['frame-ancestors'], ["'none'"]);
   assert.match(policy, /frame-ancestors 'none'/);
 });
 

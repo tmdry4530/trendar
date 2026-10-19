@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { NavLink } from 'react-router-dom';
+import { NavLink, useNavigate } from 'react-router-dom';
 import { USE_MOCK } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useTranslation } from 'react-i18next';
@@ -14,6 +14,7 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 export default function TopNav() {
   const { me, logout, deleteAccount } = useAuth();
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
   const locale = toSupportedLocale(i18n.resolvedLanguage) ?? 'en';
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
@@ -112,6 +113,24 @@ export default function TopNav() {
 
               {menuOpen && (
                 <div className={styles.dropdown} role="menu">
+                  <div className={styles.dropdownHead}>
+                    <span className={styles.dropdownUser}>{me.user.login}</span>
+                    <span className={me.plan === 'pro' ? 'pill pill--accent' : 'pill'}>
+                      {t(me.plan === 'pro' ? 'billing.plan.pro' : 'billing.plan.free')}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    className={styles.dropdownItem}
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate('/account/billing');
+                    }}
+                  >
+                    {t('nav.billing')}
+                  </button>
+                  <div className={styles.dropdownDivider} role="separator" />
                   <button type="button" className={styles.dropdownItem} role="menuitem" onClick={handleLogout}>
                     {t('nav.logout')}
                   </button>

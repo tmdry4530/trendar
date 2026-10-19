@@ -14,6 +14,7 @@ export async function upsertSubscription({
        (user_id, paddle_subscription_id, paddle_customer_id, status, price_id, current_period_end)
      VALUES (?, ?, ?, ?, ?, ?)
      ON DUPLICATE KEY UPDATE
+       paddle_subscription_id = VALUES(paddle_subscription_id),
        paddle_customer_id = VALUES(paddle_customer_id),
        status = VALUES(status),
        price_id = VALUES(price_id),
@@ -26,6 +27,14 @@ export async function findByUserId(userId) {
   const [[row]] = await pool.query(
     'SELECT * FROM subscriptions WHERE user_id = ? ORDER BY updated_at DESC LIMIT 1',
     [userId]
+  );
+  return row || null;
+}
+
+export async function findByPaddleSubscriptionId(paddleSubscriptionId) {
+  const [[row]] = await pool.query(
+    'SELECT * FROM subscriptions WHERE paddle_subscription_id = ? LIMIT 1',
+    [paddleSubscriptionId]
   );
   return row || null;
 }

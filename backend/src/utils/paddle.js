@@ -23,8 +23,20 @@ export function paddlePriceIdPro() {
   return process.env.PADDLE_PRICE_ID_PRO || '';
 }
 
+export function paddleClientToken() {
+  return process.env.PADDLE_CLIENT_TOKEN || '';
+}
+
 export function isPaddleConfigured() {
-  return Boolean(paddleApiKey() && paddlePriceIdPro());
+  return Boolean(paddleApiKey() && paddlePriceIdPro() && paddleClientToken());
+}
+
+function safeErrorDetail(value) {
+  if (typeof value !== 'string') return null;
+  for (const secret of [paddleApiKey(), process.env.PADDLE_WEBHOOK_SECRET]) {
+    if (secret) value = value.replaceAll(secret, '[redacted]');
+  }
+  return value;
 }
 
 async function paddleFetch(path, { method = 'GET', body } = {}) {
@@ -40,31 +52,31 @@ async function paddleFetch(path, { method = 'GET', body } = {}) {
   });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    const msg = data?.error?.detail || data?.error?.message || `Paddle API ${res.status}`;
-    throw new Error(msg);
+    console.error('[paddle] API request failed', {
+      status: res.status,
+      code: safeErrorDetail(data?.error?.code),
+      detail: safeErrorDetail(data?.error?.detail || data?.error?.message),
+    });
+    throw new Error('Paddle API request failed');
   }
   return data.data;
 }
 
-// 호스티드 체크아웃 트랜잭션 생성. custom_data.user_id 로 웹훅과 사용자를 연결한다.
-export async function createCheckoutTransaction({ userId }) {
+// 오버레이 결제 트랜잭션 생성. custom_data.user_id로 웹훅과 사용자를 연결한다.
+export async function createCheckoutTransaction({ userId, customerId }) {
   const priceId = paddlePriceIdPro();
   if (!priceId) throw new Error('PADDLE_PRICE_ID_PRO is not set');
-  const appUrl = (process.env.APP_URL || 'https://trendar.org').replace(/\/$/, '');
   const data = await paddleFetch('/transactions', {
     method: 'POST',
     body: {
       items: [{ price_id: priceId, quantity: 1 }],
       custom_data: { user_id: String(userId) },
       collection_mode: 'automatic',
-      checkout: {
-        url: `${appUrl}/pricing?billing=success`,
-      },
+      ...(customerId ? { customer_id: customerId } : {}),
     },
   });
-  const url = data?.checkout?.url;
-  if (!url) throw new Error('Paddle did not return a checkout URL');
-  return { transactionId: data.id, checkoutUrl: url };
+  if (!data?.id) throw new Error('Paddle did not return a transaction ID');
+  return { transactionId: data.id };
 }
 
 // 고객 포털 세션 생성 (구독 관리·취소용).
