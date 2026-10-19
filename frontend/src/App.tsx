@@ -6,6 +6,7 @@ import QueriesPage from './pages/QueriesPage';
 import ReposPage from './pages/ReposPage';
 import RepoDetailPage from './pages/RepoDetailPage';
 import LoginPage from './pages/LoginPage';
+import AccountBillingPage from './pages/AccountBillingPage';
 import { useAuth } from './auth/AuthContext';
 import { LoadingState } from './components/States';
 import { useTranslation } from 'react-i18next';
@@ -53,6 +54,7 @@ export default function App() {
           <Route path="/queries" element={<QueriesPage />} />
           <Route path="/repos" element={<ReposPage />} />
           <Route path="/repos/:id" element={<RepoDetailPage />} />
+          <Route path="/account/billing" element={<AccountBillingPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<TermsPage />} />
           <Route path="/privacy" element={<PrivacyPage />} />

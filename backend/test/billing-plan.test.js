@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { planForSubscription, limitsForPlan } from '../src/services/billing.js';
+import { maxManualEtlPerDay, maxQueriesPerUser } from '../src/utils/limits.js';
 
 test('구독 없으면 free', () => {
   assert.equal(planForSubscription(null), 'free');
@@ -40,4 +41,24 @@ test('한도: env로 재정의 가능', () => {
   process.env.PRO_MAX_MANUAL_ETL_PER_DAY = '200';
   assert.equal(limitsForPlan('pro').manualEtlPerDay, 200);
   delete process.env.PRO_MAX_MANUAL_ETL_PER_DAY;
+});
+
+test('표시 한도는 검증에 쓰이는 한도와 env 재정의·잘못된 값에서도 같다', (t) => {
+  const keys = ['MAX_MANUAL_ETL_PER_DAY', 'MAX_QUERIES_PER_USER', 'PRO_MAX_MANUAL_ETL_PER_DAY', 'PRO_MAX_QUERIES_PER_USER'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  t.after(() => {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  });
+  for (const value of ['23', '0', '-1', 'invalid', '1.5', '']) {
+    for (const key of keys) process.env[key] = value;
+    for (const plan of ['free', 'pro']) {
+      assert.deepEqual(limitsForPlan(plan), {
+        manualEtlPerDay: maxManualEtlPerDay(plan),
+        queriesPerUser: maxQueriesPerUser(plan),
+      });
+    }
+  }
 });

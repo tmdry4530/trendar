@@ -306,3 +306,64 @@ test('callback: addDailyMetrics reject여도 세션 쿠키·/ 리다이렉트 �
   assert.equal(errors[0][0], '[auth] attribution failed');
   assert.equal(errors[0][1], 'ECONNREFUSED');
 });
+
+test('login next: exact allowlist only, successful callback consumes the return cookie', async () => {
+  for (const nextPath of ['/account/billing', '//evil.com', 'https://evil.com', '/account/billing/../x', ['/account/billing'], undefined]) {
+    const ctrl = createAuthController(successDeps(metricsSpy()));
+    const loginRes = mockRes();
+    ctrl.login({ query: { next: nextPath } }, loginRes);
+    const allowed = nextPath === '/account/billing';
+    if (allowed) {
+      assert.equal(loginRes.cookies.oauth_next.value, '/account/billing');
+      assert.deepEqual(loginRes.cookies.oauth_next.options, loginRes.cookies.oauth_state.options);
+      assert.equal(loginRes.cookies.oauth_next.options.maxAge, 600000);
+    } else {
+      assert.equal(loginRes.cookies.oauth_next, undefined);
+      assert.ok(loginRes.cleared.includes('oauth_next'));
+    }
+    const cookies = Object.fromEntries(Object.entries(loginRes.cookies).map(([name, cookie]) => [name, cookie.value]));
+    const res = mockRes();
+    await ctrl.callback({
+      query: { state: cookies.oauth_state, code: 'valid' }, cookies,
+    }, res, failNext);
+    assert.equal(res.redirectedTo, allowed ? '/account/billing' : '/');
+    assert.ok(res.cleared.includes('oauth_next'));
+  }
+});
+
+test('callback revalidates the return cookie instead of trusting client input', async () => {
+  const ctrl = createAuthController(successDeps(metricsSpy()));
+  for (const nextPath of ['//evil.com', 'https://evil.com', '/account/billing/../x', ['/account/billing']]) {
+    const res = mockRes();
+    await ctrl.callback({
+      query: { state: 'match', code: 'valid', next: '/account/billing' },
+      cookies: { oauth_state: 'match', oauth_next: nextPath },
+    }, res, failNext);
+    assert.equal(res.redirectedTo, '/');
+    assert.ok(res.cleared.includes('oauth_next'));
+  }
+});
+
+test('callback clears next and state cookies on every success/error path', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  for (const path of ['success', 'denied', 'state', 'exchange', 'profile', 'user', 'session']) {
+    const deps = successDeps(metricsSpy());
+    const failure = new Error(path);
+    if (path === 'exchange') deps.oauth.exchangeCode = async () => { throw failure; };
+    if (path === 'profile') deps.oauth.fetchGithubUser = async () => { throw failure; };
+    if (path === 'user') deps.users.upsertFromGithub = async () => { throw failure; };
+    if (path === 'session') deps.sessions.create = async () => { throw failure; };
+    const ctrl = createAuthController(deps);
+    const query = path === 'denied' ? { error: 'access_denied' } : { state: path === 'state' ? 'wrong' : 'match', code: 'valid' };
+    const res = mockRes();
+    let nextError;
+    await ctrl.callback({
+      query, cookies: { oauth_state: 'match', oauth_next: '/account/billing' },
+    }, res, (error) => { nextError = error; });
+    assert.ok(res.cleared.includes('oauth_next'), path);
+    assert.ok(res.cleared.includes('oauth_state'), path);
+    if (path === 'success') assert.equal(res.redirectedTo, '/account/billing');
+    else if (path === 'user' || path === 'session') assert.equal(nextError, failure);
+    else assert.equal(res.redirectedTo, `/login?error=${path}`);
+  }
+});

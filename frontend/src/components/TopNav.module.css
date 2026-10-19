@@ -131,7 +131,7 @@
   position: absolute;
   top: calc(100% + 8px);
   right: 0;
-  min-width: 160px;
+  min-width: 200px;
   background: linear-gradient(180deg, var(--surface-3), var(--surface-2));
   border: 1px solid var(--line);
   border-radius: var(--radius);
@@ -156,6 +156,27 @@
 .dropdownItem:hover { background: var(--surface-2); }
 .dropdownDanger { color: var(--danger); }
 .dropdownDanger:hover { background: var(--danger-soft); }
+.dropdownHead {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 6px 10px 8px;
+}
+.dropdownUser {
+  font-family: var(--mono);
+  font-size: 12px;
+  color: var(--muted);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dropdownDivider {
+  height: 1px;
+  margin: 4px 2px;
+  background: var(--line);
+}
 
 @keyframes dropdown-in {
   from { opacity: 0; transform: translateY(-4px); }

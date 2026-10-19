@@ -3,6 +3,7 @@
 // 모든 엔드포인트(조회 + 변형 + ETL)를 상태를 가진 채로 흉내 낸다.
 // 실제 호출 경로(client.ts 의 fetch)가 기본값이며, 이 파일은 토글 시에만 동작한다.
 import { ApiError } from './client';
+import type { OpenCheckoutOptions } from '../lib/paddle';
 import type {
   WatchQuery,
   Repo,
@@ -20,6 +21,12 @@ import type {
   QueryType,
   RepoSort,
   Me,
+  Plan,
+  PlanLimits,
+  BillingInfo,
+  BillingSubscription,
+  CheckoutResult,
+  PortalResult,
 } from '../types';
 
 type MockRepo = Repo & { note: string | null; first_seen_at: string };
@@ -108,9 +115,18 @@ export async function mockFetch<T>(
   await delay(280); // 로딩 상태를 보이게 하는 인위적 지연
   const m = method.toUpperCase();
 
+  syncMockBillingParam();
+
   if (path === '/auth/me' && m === 'GET') return meResponse() as T;
   if (path === '/auth/logout' && m === 'POST') return null as T;
   if (path === '/auth/account' && m === 'DELETE') return null as T;
+
+  if (path === '/billing/me' && m === 'GET') {
+    if (billingStalled) return new Promise<T>(() => {}); // stall: 응답 없는 요청 흉내
+    return billingMe() as T;
+  }
+  if (path === '/billing/checkout' && m === 'POST') return createMockCheckout() as T;
+  if (path === '/billing/portal' && m === 'POST') return mockPortal() as T;
 
   if (path === '/queries' && m === 'GET') return listQueries() as T;
   if (path === '/queries' && m === 'POST') return createQuery(body) as T;
@@ -145,8 +161,148 @@ export async function mockFetch<T>(
 }
 
 // ── auth ────────────────────────────────────────────────────────────────────
+// ?mockAuth=anon 이면 비로그인 상태(/pricing 등 공개 화면 확인용).
 function meResponse(): Me {
-  return { user: { login: 'demo', name: 'Demo User', avatarUrl: null }, tokenInvalid: false, plan: 'free' };
+  if (new URLSearchParams(window.location.search).get('mockAuth') === 'anon') {
+    throw new ApiError('UNAUTHORIZED', 401);
+  }
+  return { user: { login: 'demo', name: 'Demo User', avatarUrl: null }, tokenInvalid: false, plan: mockPlan() };
+}
+
+// ── billing ─────────────────────────────────────────────────────────────────
+// 목 전용 상태 전환: ?mockBilling=free|unconfigured|pro|trialing|past_due|canceled|canceled_expired|paused
+// (localStorage 에 유지). 결제 시뮬레이션: ?mockCheckout=complete(기본)|delayed|closed|fail|fail_once|stall
+// (fail_once: 이 페이지에서 첫 시도만 로드 실패, stall: 결제 완료 후 /billing/me 가 응답하지 않음)
+const MOCK_BILLING_STATES = [
+  'free', 'unconfigured', 'pro', 'trialing', 'past_due', 'canceled', 'canceled_expired', 'paused',
+] as const;
+type MockBillingState = (typeof MOCK_BILLING_STATES)[number];
+const MOCK_BILLING_KEY = 'trendar.mockBilling';
+const MOCK_LIMITS: Record<Plan, PlanLimits> = {
+  free: { manualEtlPerDay: 10, queriesPerUser: 10 },
+  pro: { manualEtlPerDay: 100, queriesPerUser: 50 },
+};
+// [status, 기간 종료까지 남은 일수(null=없음)]
+const MOCK_SUBSCRIPTIONS: Partial<Record<MockBillingState, [string, number | null]>> = {
+  pro: ['active', 21],
+  trialing: ['trialing', 7],
+  past_due: ['past_due', 2],
+  canceled: ['canceled', 12],
+  canceled_expired: ['canceled', -5],
+  paused: ['paused', null],
+};
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function isMockBillingState(value: unknown): value is MockBillingState {
+  return MOCK_BILLING_STATES.includes(value as MockBillingState);
+}
+
+let billingState: MockBillingState = (() => {
+  try {
+    const stored = window.localStorage.getItem(MOCK_BILLING_KEY);
+    if (isMockBillingState(stored)) return stored;
+  } catch {
+    // localStorage 차단 시 기본값
+  }
+  return 'free';
+})();
+let appliedBillingParam: string | null = null;
+
+function setBillingState(next: MockBillingState) {
+  billingState = next;
+  try {
+    window.localStorage.setItem(MOCK_BILLING_KEY, next);
+  } catch {
+    // 메모리 상태만 유지
+  }
+}
+
+// URL 파라미터는 처음 보였을 때만 적용해, 결제 시뮬레이션으로 바뀐 상태를 되돌리지 않는다.
+function syncMockBillingParam() {
+  const param = new URLSearchParams(window.location.search).get('mockBilling');
+  if (param === appliedBillingParam || !isMockBillingState(param)) return;
+  appliedBillingParam = param;
+  setBillingState(param);
+}
+
+function mockSubscription(): BillingSubscription | null {
+  const entry = MOCK_SUBSCRIPTIONS[billingState];
+  if (!entry) return null;
+  const [status, days] = entry;
+  return {
+    status,
+    current_period_end: days === null ? null : new Date(Date.now() + days * DAY_MS).toISOString(),
+    price_id: 'pri_mock_pro',
+    has_customer: true,
+  };
+}
+
+// backend services/billing.js planForSubscription 과 같은 규칙
+function mockPlan(): Plan {
+  const sub = mockSubscription();
+  if (!sub) return 'free';
+  if (['active', 'trialing', 'past_due'].includes(sub.status)) return 'pro';
+  if (sub.status === 'canceled' && sub.current_period_end && new Date(sub.current_period_end) > new Date()) {
+    return 'pro';
+  }
+  return 'free';
+}
+
+function billingMe(): BillingInfo {
+  const plan = mockPlan();
+  const configured = billingState !== 'unconfigured';
+  return {
+    plan,
+    subscription: mockSubscription(),
+    configured,
+    client: configured ? { token: 'test_mock_client_token', environment: 'sandbox' } : null,
+    limits: MOCK_LIMITS,
+    usage: {
+      queries_used: queries.length,
+      queries_limit: MOCK_LIMITS[plan].queriesPerUser,
+      manual_used_today: manualUsed,
+      manual_limit: MOCK_LIMITS[plan].manualEtlPerDay,
+      manual_reset_at: nextKstMidnight(),
+    },
+  };
+}
+
+function createMockCheckout(): CheckoutResult {
+  if (billingState === 'unconfigured') throw new ApiError('BILLING_NOT_CONFIGURED', 503);
+  if (mockPlan() === 'pro') throw new ApiError('ALREADY_PRO', 409);
+  return { transaction_id: `txn_mock_${Date.now()}` };
+}
+
+function mockPortal(): PortalResult {
+  if (!mockSubscription()?.has_customer) throw new ApiError('NO_SUBSCRIPTION', 404);
+  return { portal_url: `${window.location.origin}/account/billing` };
+}
+
+let billingStalled = false;
+let failedOnce = false;
+
+/** 목 모드에서 Paddle.js 대신 결제창 이벤트를 흉내 낸다. 웹훅 반영은 지연 후 Pro 로 전환. */
+export async function mockOpenCheckout({ transactionId, onEvent, signal }: OpenCheckoutOptions): Promise<boolean> {
+  const mode = new URLSearchParams(window.location.search).get('mockCheckout') ?? 'complete';
+  await delay(400);
+  if (mode === 'fail' || (mode === 'fail_once' && !failedOnce)) {
+    failedOnce = true;
+    throw new Error('Mock Paddle.js load failure');
+  }
+  if (signal?.aborted) return false;
+  console.info(`[mock] Checkout.open ${transactionId}`);
+  onEvent({ name: 'checkout.loaded' });
+  if (mode === 'closed') {
+    setTimeout(() => onEvent({ name: 'checkout.closed' }), 800);
+    return true;
+  }
+  setTimeout(() => {
+    onEvent({ name: 'checkout.completed' });
+    if (mode === 'stall') billingStalled = true;
+    else setTimeout(() => setBillingState('pro'), mode === 'delayed' ? 65_000 : 4_000);
+    setTimeout(() => onEvent({ name: 'checkout.closed' }), 1_500);
+  }, 800);
+  return true;
 }
 
 // ── queries ─────────────────────────────────────────────────────────────────
@@ -162,6 +318,9 @@ function createQuery(body: unknown): WatchQuery {
   const type: QueryType = b.query_type === 'topic' ? 'topic' : 'keyword';
   if (text.length < 1 || text.length > 200) {
     throw new ApiError('VALIDATION_ERROR', 400);
+  }
+  if (queries.length >= MOCK_LIMITS[mockPlan()].queriesPerUser) {
+    throw new ApiError('QUERY_LIMIT_EXCEEDED', 400);
   }
   if (queries.some((q) => q.query === text && q.query_type === type)) {
     throw new ApiError('DUPLICATE', 409);
@@ -257,7 +416,6 @@ function deleteRepo(id: number): DeletedResult {
 }
 
 // ── etl ─────────────────────────────────────────────────────────────────────
-const MANUAL_LIMIT = 10;
 let manualUsed = 0;
 
 function nextKstMidnight(): string {
@@ -269,7 +427,7 @@ function nextKstMidnight(): string {
 }
 
 function runEtl(query?: Record<string, unknown>): EtlRunResult {
-  if (manualUsed >= MANUAL_LIMIT) {
+  if (manualUsed >= MOCK_LIMITS[mockPlan()].manualEtlPerDay) {
     throw new ApiError('ETL_DAILY_LIMIT_EXCEEDED', 429);
   }
   manualUsed++;
@@ -319,8 +477,8 @@ function etlStatus(): EtlStatus {
     running: false,
     cron: '0 */6 * * *',
     manual_used_today: manualUsed,
-    manual_limit: MANUAL_LIMIT,
-    manual_remaining: Math.max(MANUAL_LIMIT - manualUsed, 0),
+    manual_limit: MOCK_LIMITS[mockPlan()].manualEtlPerDay,
+    manual_remaining: Math.max(MOCK_LIMITS[mockPlan()].manualEtlPerDay - manualUsed, 0),
     manual_reset_at: nextKstMidnight(),
   };
 }

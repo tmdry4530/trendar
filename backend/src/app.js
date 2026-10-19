@@ -23,7 +23,9 @@ export function createApp({ publicDeps = createPublicDeps() } = {}) {
   app.use(helmet({
     contentSecurityPolicy: {
       directives: {
-        connectSrc: ["'self'"],
+        scriptSrc: ["'self'", 'https://cdn.paddle.com'],
+        frameSrc: ['https://buy.paddle.com', 'https://sandbox-buy.paddle.com'],
+        connectSrc: ["'self'", 'https://*.paddle.com'],
         frameAncestors: ["'none'"],
         imgSrc: ["'self'", 'data:', 'https:'],
         upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,

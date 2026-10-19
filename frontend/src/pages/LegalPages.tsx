@@ -1,12 +1,10 @@
 // LegalPages.tsx — 공개(비로그인 접근 가능) 가격·약관·개인정보·환불 페이지.
 // Paddle 도메인 심사용. 결제는 Paddle(Merchant of Record)이 처리한다.
 import type { ReactNode } from 'react';
-import { useEffect, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import styles from './LegalPages.module.css';
 import { useAuth } from '../auth/AuthContext';
-import { createCheckout, openCustomerPortal } from '../api/billing';
-import { ApiError } from '../api/client';
 
 export const LEGAL = {
   product: 'Trendar',
@@ -29,132 +27,68 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
+// backend utils/limits.js 기본값 (MAX_*/PRO_MAX_* 미설정 시)
+const DEFAULT_LIMITS = {
+  free: { queries: 10, manual: 10 },
+  pro: { queries: 50, manual: 100 },
+};
+
+// 업그레이드(결제) 시작 위치는 /account/billing 한 곳. 비로그인은 로그인 후 그 화면으로 돌아온다.
+const LOGIN_TO_BILLING = '/api/auth/github?next=/account/billing';
+
 export function PricingPage() {
-  const { status, me, refresh } = useAuth();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const billingResult = searchParams.get('billing');
-
-  useEffect(() => {
-    // 체크아웃에서 돌아오면 플랜 상태를 다시 읽는다 (웹훅 반영 대기).
-    if (billingResult === 'success' && status === 'authed') {
-      const t = setTimeout(() => { refresh().catch(() => {}); }, 3000);
-      return () => clearTimeout(t);
-    }
-  }, [billingResult, status, refresh]);
-
-  const dismissNotice = () => {
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.delete('billing');
-      return next;
-    }, { replace: true });
-  };
-
-  const startCheckout = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const { checkout_url } = await createCheckout();
-      window.location.href = checkout_url;
-    } catch (e) {
-      if (e instanceof ApiError && e.code === 'ALREADY_PRO') {
-        refresh().catch(() => {});
-        setError('이미 Pro를 이용 중입니다.');
-      } else if (e instanceof ApiError && e.code === 'BILLING_NOT_CONFIGURED') {
-        setError('결제 설정이 아직 준비 중입니다. 잠시 후 다시 시도해 주세요.');
-      } else {
-        setError(e instanceof Error ? e.message : '체크아웃을 열 수 없습니다.');
-      }
-      setBusy(false);
-    }
-  };
-
-  const openPortal = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const { portal_url } = await openCustomerPortal();
-      window.location.href = portal_url;
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '구독 관리 페이지를 열 수 없습니다.');
-      setBusy(false);
-    }
-  };
-
-  const isPro = status === 'authed' && me?.plan === 'pro';
+  const { status, me } = useAuth();
+  const { t } = useTranslation();
+  const authed = status === 'authed';
+  const isPro = authed && me?.plan === 'pro';
 
   return (
     <article className={styles.page}>
       <Link to="/" className={styles.back}>◎ Trendar</Link>
-      <h1 className={styles.title}>Pricing</h1>
-      <p className={styles.lead}>
-        Trendar is a GitHub trend radar. It tracks fast-rising open-source repositories for the
-        keywords, topics and languages you care about, and shows star growth over time.
-      </p>
-      {billingResult === 'success' && (
-        <p className={styles.note} role="status">
-          결제가 완료되었습니다. 구독이 확인되는 대로 Pro가 적용됩니다. (잠시 후 새로고침){' '}
-          <button type="button" className="btn btn--sm" onClick={dismissNotice}>닫기</button>
-        </p>
-      )}
-      {billingResult === 'cancelled' && (
-        <p className={styles.note} role="status">
-          결제가 취소되었습니다. 언제든 다시 업그레이드할 수 있습니다.{' '}
-          <button type="button" className="btn btn--sm" onClick={dismissNotice}>닫기</button>
-        </p>
-      )}
-      {error && (
-        <p className={styles.note} role="alert">{error}</p>
-      )}
+      <h1 className={styles.title}>{t('pricing.title')}</h1>
+      <p className={styles.lead}>{t('pricing.lead')}</p>
       <div className={styles.plans}>
         <section className={`panel ${styles.plan}`}>
-          <h2>Free</h2>
-          <div className={styles.price}>$0</div>
+          <h2>{t('pricing.free.name')}</h2>
+          <div className={styles.price}>{t('pricing.free.price')}</div>
           <ul>
-            <li>Rising repositories dashboard</li>
-            <li>Up to 10 saved search queries</li>
-            <li>10 manual collections per day</li>
-            <li>Star history charts</li>
-            <li>Bookmarks</li>
+            <li>{t('pricing.free.dashboard')}</li>
+            <li>{t('pricing.free.queries', { count: DEFAULT_LIMITS.free.queries })}</li>
+            <li>{t('pricing.free.manual', { count: DEFAULT_LIMITS.free.manual })}</li>
+            <li>{t('pricing.free.charts')}</li>
+            <li>{t('pricing.free.bookmarks')}</li>
           </ul>
-          {status !== 'authed' && (
-            <a href="/api/auth/github" className="btn">Start free with GitHub</a>
+          {!authed && (
+            <a href="/api/auth/github" className="btn">{t('pricing.free.start')}</a>
           )}
         </section>
         <section className={`panel ${styles.plan} ${styles.featured}`}>
-          <h2>Trendar Pro</h2>
-          <div className={styles.price}>$9.99<span> / month</span></div>
+          <h2>{t('pricing.pro.name')}</h2>
+          <div className={styles.price}>
+            {t('pricing.pro.price')}<span>{t('pricing.perMonth')}</span>
+          </div>
           <ul>
-            <li>Everything in Free</li>
-            <li>Up to 50 saved queries</li>
-            <li>100 manual collections per day</li>
-            <li>Priority support</li>
+            <li>{t('pricing.pro.everything')}</li>
+            <li>{t('pricing.pro.queries', { count: DEFAULT_LIMITS.pro.queries })}</li>
+            <li>{t('pricing.pro.manual', { count: DEFAULT_LIMITS.pro.manual })}</li>
+            <li>{t('pricing.pro.support')}</li>
           </ul>
-          {status === 'authed' ? (
-            isPro ? (
-              <>
-                <p className={styles.note}>현재 Pro를 이용 중입니다.</p>
-                <button type="button" className="btn" onClick={openPortal} disabled={busy}>
-                  {busy ? '여는 중…' : '구독 관리·취소'}
-                </button>
-              </>
-            ) : (
-              <button type="button" className="btn btn--primary" onClick={startCheckout} disabled={busy}>
-                {busy ? '여는 중…' : 'Pro로 업그레이드'}
-              </button>
-            )
+          {isPro ? (
+            <>
+              <p className={styles.note}>{t('pricing.pro.current')}</p>
+              <Link to="/account/billing" className="btn">{t('pricing.pro.manage')}</Link>
+            </>
+          ) : authed ? (
+            <Link to="/account/billing" className="btn btn--primary">{t('pricing.pro.upgrade')}</Link>
           ) : (
-            <a href="/api/auth/github" className="btn btn--primary">Sign in to upgrade</a>
+            <a href={LOGIN_TO_BILLING} className="btn btn--primary">{t('pricing.pro.signIn')}</a>
           )}
         </section>
       </div>
       <p className={styles.note}>
-        Prices in USD. Taxes may apply depending on your location. Pro renews monthly until
-        cancelled; you can cancel anytime from the subscription portal. See our{' '}
-        <Link to="/refund">Refund Policy</Link>.
-        Payments are processed by Paddle.com, our Merchant of Record.
+        {t('pricing.notePrefix')}
+        <Link to="/refund">{t('pricing.refundLink')}</Link>
+        {t('pricing.noteSuffix')}
       </p>
     </article>
   );
@@ -271,14 +205,15 @@ export function RefundPage() {
 }
 
 export function LegalFooter() {
+  const { t } = useTranslation();
   return (
     <footer className={styles.footer}>
       <nav>
-        <Link to="/pricing">Pricing</Link>
-        <Link to="/terms">Terms</Link>
-        <Link to="/privacy">Privacy</Link>
-        <Link to="/refund">Refunds</Link>
-        <a href={`mailto:${LEGAL.email}`}>Contact</a>
+        <Link to="/pricing">{t('footer.pricing')}</Link>
+        <Link to="/terms">{t('footer.terms')}</Link>
+        <Link to="/privacy">{t('footer.privacy')}</Link>
+        <Link to="/refund">{t('footer.refund')}</Link>
+        <a href={`mailto:${LEGAL.email}`}>{t('footer.contact')}</a>
       </nav>
       <p>© 2026 {LEGAL.legalName} · {LEGAL.email}</p>
     </footer>
