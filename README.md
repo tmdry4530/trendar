@@ -71,7 +71,7 @@ flowchart LR
 | 외부 데이터 | GitHub Search API (`@octokit/rest`) |
 | DB | MySQL (`mysql2`) |
 | 인증 | GitHub OAuth App · DB 세션 + httpOnly 쿠키 · AES-256-GCM 토큰 암호화 |
-| 배포 | Railway (Docker, 통합 서빙) |
+| 배포 | 개인 VPS (Docker, Coolify Traefik 뒤 통합 서빙) |
 | 테스트 | `node:test` (의존성 주입 기반 단위 테스트) |
 
 ---
@@ -234,10 +234,10 @@ node src/etl/public-pipeline.js    # 피드 33개 기준 Search 33회 × 2.1초 
 
 ### 프록시 신뢰 설정
 
-OG 이미지·배지는 합산해서 IP당 분당 `PUBLIC_IMAGE_RATE_LIMIT_PER_MIN`(기본 120)회로 제한하고, 넘으면 `429` + `Retry-After`를 준다. 실제 방문자 IP를 얻기 위해 Express `trust proxy`를 `TRUST_PROXY_HOPS`로 설정한다.
+OG 이미지·배지는 합산해서 IP당 분당 `PUBLIC_IMAGE_RATE_LIMIT_PER_MIN`(기본 120)회로 제한한다. 넘으면 OG는 `429` + `Retry-After`, 배지는 README가 깨지지 않도록 중립 배지를 `no-store`로 준다. 실제 방문자 IP를 얻기 위해 Express `trust proxy`를 `TRUST_PROXY_HOPS`로 설정한다.
 
-- Railway 단독(기본): `TRUST_PROXY_HOPS=1`
-- Cloudflare → Railway: `TRUST_PROXY_HOPS=2`
+- VPS(Traefik 한 단, Cloudflare 프록시 꺼짐, 기본): `TRUST_PROXY_HOPS=1`
+- Cloudflare 프록시를 켜면: `TRUST_PROXY_HOPS=2`
 - 프록시 없이 직접 노출: `TRUST_PROXY_HOPS=0`
 
 값이 실제 홉 수보다 크면 방문자가 `X-Forwarded-For`를 위조해 제한을 피할 수 있고, 작으면 모든 방문자가 프록시 IP 하나로 묶여 함께 제한된다.
@@ -245,7 +245,7 @@ OG 이미지·배지는 합산해서 IP당 분당 `PUBLIC_IMAGE_RATE_LIMIT_PER_M
 ### 캐시
 
 - **페이지**: 응답에 `Cache-Control: public, max-age=600`. 같은 페이지의 DB 조회·랭킹 결과는 서버 메모리에 최대 10분 캐시한다. 비로그인 `/`만 쿠키에 따라 내용이 달라 `private, no-store`.
-- **OG PNG**: 데이터 revision(순위·스타·증가·마지막 수집 시각)이 바뀔 때까지 메모리에 캐시한다. 렌더(`@resvg/resvg-wasm` + 동봉 IBM Plex 폰트)가 실패하면 정적 `og-v2.png`를 200으로 주고 캐시하지 않는다.
+- **OG PNG**: 데이터 revision(순위·스타·증가·마지막 수집 시각)이 바뀔 때까지 메모리에 캐시한다. 레포 이미지는 현재 피드 순위가 있는 레포만 그리고, 새 렌더는 프로세스 전체에서 초당 1개(순간 최대 5개)로 제한한다. 순위 밖·예산 초과·렌더 실패 시에는 공통 Trendar 이미지(약 30KB)를 캐시 없이 준다.
 - **배지**: `public, max-age=3600`.
 - 다른 사용자의 쿠키가 있어도 공개 페이지(`/` 제외) 내용은 같고 `Set-Cookie`가 없어 공유 캐시에 안전하다.
 
