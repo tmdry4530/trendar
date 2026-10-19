@@ -58,23 +58,25 @@ function fakeData() {
   };
 }
 
-function fakeDeps({ authenticated = false } = {}) {
+function fakeDeps({ authenticated = false, data = fakeData(), hasValidSession } = {}) {
   const auth = { calls: 0 };
   const tracked = [];
   const deps = createPublicDeps({
     appUrl: APP_URL,
     feeds,
-    data: fakeData(),
+    data,
     model: {
       addDailyMetrics: async () => {
         throw new Error('model must not be used');
       },
     },
-    og: { fallbackPng: PNG, render: async () => ({ buffer: PNG, fallback: false }) },
-    isAuthenticated: async () => {
-      auth.calls += 1;
-      return authenticated;
-    },
+    og: { fallbackPng: PNG, getFallbackPng: async () => PNG, render: async () => ({ buffer: PNG, fallback: false }) },
+    ...(hasValidSession ? { hasValidSession } : {
+      isAuthenticated: async () => {
+        auth.calls += 1;
+        return authenticated;
+      },
+    }),
     tracker: {
       middleware(req, res, next) {
         res.locals.track = (template) => tracked.push(template);
@@ -208,5 +210,87 @@ test('the real app keeps /api behavior and mounts public routes', async () => {
     assert.equal(trending.status, 200);
     assert.equal(trending.headers.get('cache-control'), 'public, max-age=600');
     assert.match(trending.headers.get('content-security-policy') ?? '', /default-src 'self'/);
+  });
+});
+
+test('session-store outage keeps cookie-bearing root requests on the SPA without querying public data', async () => {
+  let lookups = 0;
+  const hashes = [];
+  const data = fakeData();
+  data.getFeed = data.getFeedIndex = async () => {
+    lookups += 1;
+    throw new Error('public DB unavailable');
+  };
+  await withStubApp({
+    data,
+    hasValidSession: async (hash) => { hashes.push(hash); throw new Error('session DB unavailable'); },
+  }, async ({ get }) => {
+    const signedIn = await get('/', { headers: { cookie: 'sid=existing-session' } });
+    assert.equal(signedIn.status, 200);
+    assert.equal(await signedIn.text(), 'SPA');
+    assert.equal(signedIn.headers.get('cache-control'), 'private, no-store');
+    assert.match(signedIn.headers.get('vary'), /Cookie/);
+    assert.equal(lookups, 0);
+    assert.equal(hashes.length, 1);
+    assert.match(hashes[0], /^[a-f0-9]{64}$/);
+    assert.notEqual(hashes[0], 'existing-session');
+
+    const anonymous = await get('/');
+    assert.equal(anonymous.status, 503);
+    assert.match(anonymous.headers.get('content-type'), /^text\/html/);
+    assert.equal(anonymous.headers.get('cache-control'), 'no-store');
+    assert.equal(hashes.length, 1, 'anonymous requests do not query sessions');
+  });
+});
+
+test('invalid sessions still render the anonymous root instead of bypassing it', async () => {
+  await withStubApp({ hasValidSession: async () => false }, async ({ get }) => {
+    const response = await get('/', { headers: { cookie: 'sid=expired-session' } });
+    assert.equal(response.status, 200);
+    assert.match(await response.text(), /acme\/rocket/);
+  });
+});
+
+test('real app returns public HTML/text 503 errors while API errors stay JSON', async () => {
+  const unavailable = async () => { throw new Error('private database host details'); };
+  const { deps } = fakeDeps({
+    data: { getFeed: unavailable, getFeedIndex: unavailable, getRepo: unavailable, getSitemapEntries: unavailable },
+  });
+  await listen(createApp({ publicDeps: deps }), async (get) => {
+    for (const path of ['/', '/ko', '/trending', '/trending/language/python', '/trending/topic/llm', '/repo/a/b', '/ko/trending', '/ko/repo/a/b']) {
+      const response = await get(path);
+      assert.equal(response.status, 503, path);
+      assert.match(response.headers.get('content-type'), /^text\/html/, path);
+      assert.equal(response.headers.get('cache-control'), 'no-store', path);
+      const html = await response.text();
+      assert.match(html, /<!doctype html>/i, path);
+      assert.doesNotMatch(html, /private database host|URIError/, path);
+    }
+    const sitemap = await get('/sitemap.xml');
+    assert.equal(sitemap.status, 503);
+    assert.match(sitemap.headers.get('content-type'), /^text\/plain/);
+    assert.equal(sitemap.headers.get('cache-control'), 'no-store');
+    assert.match(await sitemap.text(), /temporarily unavailable/);
+
+    const api = await get('/api/health', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{' });
+    assert.equal(api.status, 400);
+    assert.match(api.headers.get('content-type'), /^application\/json/);
+    assert.deepEqual(Object.keys(await api.json()).sort(), ['error', 'ok']);
+  });
+});
+
+test('malformed public URL encoding returns minimal noindex HTML 400, not a service outage', async () => {
+  const { deps } = fakeDeps();
+  await listen(createApp({ publicDeps: deps }), async (get) => {
+    for (const path of ['/repo/%ZZ/b', '/ko/repo/%E0%A4%A/b', '/trending/topic/%FF']) {
+      const response = await get(path);
+      assert.equal(response.status, 400, path);
+      assert.match(response.headers.get('content-type'), /^text\/html/, path);
+      assert.equal(response.headers.get('cache-control'), 'no-store', path);
+      const html = await response.text();
+      assert.match(html, /<meta name="robots" content="noindex">/, path);
+      assert.match(html, /400/, path);
+      assert.doesNotMatch(html, /temporarily unavailable|URIError|Failed to decode/, path);
+    }
   });
 });

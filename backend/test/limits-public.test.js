@@ -29,8 +29,10 @@ for (const [key, getLimit, fallback] of CASES) {
       else process.env[key] = value;
       assert.equal(getLimit(), fallback, `${key}=${value}`);
     }
-    process.env[key] = '123';
-    assert.equal(getLimit(), 123);
+    if (key !== 'ETL_SEARCH_INTERVAL_MS') {
+      process.env[key] = '123';
+      assert.equal(getLimit(), 123);
+    }
     if (key !== 'RISING_MIN_GROWTH') {
       process.env[key] = '1.5';
       assert.equal(getLimit(), fallback);
@@ -43,6 +45,18 @@ test('RISING_MIN_GROWTH는 양의 유한 소수를 허용한다', () => {
   process.env.RISING_MIN_GROWTH = '0.25';
   assert.equal(risingMinGrowth(), 0.25);
   delete process.env.RISING_MIN_GROWTH;
+});
+
+test('ETL_SEARCH_INTERVAL_MS는 2100ms 미만이면 2100ms로 올리고 그 이상은 그대로 쓴다', () => {
+  for (const value of ['1', '123', '2099']) {
+    process.env.ETL_SEARCH_INTERVAL_MS = value;
+    assert.equal(searchIntervalMs(), 2100, `ETL_SEARCH_INTERVAL_MS=${value}`);
+  }
+  for (const value of ['2100', '2101', '5000']) {
+    process.env.ETL_SEARCH_INTERVAL_MS = value;
+    assert.equal(searchIntervalMs(), Number(value));
+  }
+  delete process.env.ETL_SEARCH_INTERVAL_MS;
 });
 
 test('TRUST_PROXY_HOPS는 0을 허용하고 잘못된 설정은 1이다', () => {

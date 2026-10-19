@@ -60,8 +60,9 @@ export function createPublicData({ model, feeds, rankRising, measureCandidate, r
 
   async function getFeed(kind, slug) {
     if (!configByKey.has(`${kind}:${slug}`)) return null;
-    return cache.getOrCompute(`feed:${kind}:${slug}`, async () => {
+    return cache.getOrCompute(`feed:${kind}:${slug}`, async ({ dependsOn }) => {
       const run = (await getRuns()).find((feed) => feed.kind === kind && feed.slug === slug);
+      dependsOn('feeds');
       const candidates = run.id == null ? [] : await model.feedCandidates(run.id, { windowDays: risingConfig.windowDays });
       const rows = rankRising(candidates, { ...risingConfig, limit: 50 }, now());
       const view = { feed: publicFeed(run), rows };
@@ -70,7 +71,8 @@ export function createPublicData({ model, feeds, rankRising, measureCandidate, r
   }
 
   async function getRepo(owner, name) {
-    return cache.getOrCompute(`repo:${owner}/${name}`.toLowerCase(), async () => {
+    // 레포 뷰의 순위는 캐시된 피드 뷰에서 나오므로, 피드 뷰보다 오래 캐시되지 않게 의존성을 알린다(R4.8 최대 10분).
+    return cache.getOrCompute(`repo:${owner}/${name}`.toLowerCase(), async ({ dependsOn }) => {
       const repo = await model.findPublicRepo(owner, name);
       if (!repo) return null;
       const [memberships, candidate, snapshots] = await Promise.all([
@@ -82,6 +84,7 @@ export function createPublicData({ model, feeds, rankRising, measureCandidate, r
         const feed = configByKey.get(`${membership.kind}:${membership.slug}`);
         if (!feed) return null;
         const view = await getFeed(feed.kind, feed.slug);
+        dependsOn(`feed:${feed.kind}:${feed.slug}`);
         const row = view.rows.find((item) => String(item.id) === String(repo.id));
         return { kind: feed.kind, slug: feed.slug, name: feed.name, rank: row?.rank ?? null };
       }));

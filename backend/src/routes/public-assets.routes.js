@@ -8,7 +8,10 @@ const BADGE_CACHE = 'public, max-age=3600';
 
 export function createPublicAssetsRouter({ data, og, rateLimit, log = console }) {
   const router = Router();
-  router.use(['/og', '/badge'], rateLimit);
+  router.use(['/og', '/badge'], (req, res, next) => {
+    res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+    next();
+  }, rateLimit);
 
   function sendPng(res, status, buffer, cacheControl) {
     res.status(status);
@@ -17,22 +20,27 @@ export function createPublicAssetsRouter({ data, og, rateLimit, log = console })
     res.send(buffer);
   }
 
+  async function sendGeneric(res, status, cacheControl) {
+    return sendPng(res, status, await og.getFallbackPng(), cacheControl);
+  }
+
   async function sendOg(res, load) {
     try {
       const target = await load();
-      if (!target) return sendPng(res, 404, og.fallbackPng, OG_CACHE);
+      if (!target) return sendGeneric(res, 404, OG_CACHE);
+      if (target.unranked) return sendGeneric(res, 200, 'no-store');
       const { buffer, fallback } = await og.render(target);
       return sendPng(res, 200, buffer, fallback ? 'no-store' : OG_CACHE);
     } catch (error) {
       log.error('[public] og request failed', { message: error?.message });
-      return sendPng(res, 200, og.fallbackPng, 'no-store');
+      return sendGeneric(res, 200, 'no-store');
     }
   }
 
   function feedOg(kind, slugOf) {
     return (req, res) => {
       const slug = slugOf(req);
-      if (!SLUG_RE.test(slug)) return sendPng(res, 404, og.fallbackPng, OG_CACHE);
+      if (!SLUG_RE.test(slug)) return sendGeneric(res, 404, OG_CACHE);
       return sendOg(res, async () => {
         const view = await data.getFeed(kind, slug);
         if (!view) return null;
@@ -51,11 +59,12 @@ export function createPublicAssetsRouter({ data, og, rateLimit, log = console })
 
   router.get('/og/repo/:owner/:name.png', (req, res) => {
     const { owner, name } = req.params;
-    if (!OWNER_RE.test(owner) || !REPO_NAME_RE.test(name)) return sendPng(res, 404, og.fallbackPng, OG_CACHE);
+    if (!OWNER_RE.test(owner) || !REPO_NAME_RE.test(name)) return sendGeneric(res, 404, OG_CACHE);
     return sendOg(res, async () => {
       const view = await data.getRepo(owner, name);
       if (!view) return null;
       const { repo, latest, best } = view;
+      if (!best) return { unranked: true };
       return {
         key: `repo:${owner}/${name}`.toLowerCase(),
         revision: view.revision,
@@ -64,7 +73,7 @@ export function createPublicAssetsRouter({ data, og, rateLimit, log = console })
           stars: latest?.stars ?? repo.stars,
           rate_24h: latest?.rate_24h ?? null,
           baseline_source: latest?.baseline_source ?? null,
-          bestLabel: best ? `Trending #${best.rank} · ${best.name?.en ?? best.slug}` : null,
+          bestLabel: `Trending #${best.rank} · ${best.name?.en ?? best.slug}`,
         }),
       };
     });

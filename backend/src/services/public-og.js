@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { setImmediate } from 'node:timers/promises';
 import { initWasm, Resvg } from '@resvg/resvg-wasm';
 import { escapeXml } from '../utils/public-output.js';
 import { createTtlCache } from '../utils/ttl-cache.js';
@@ -146,16 +147,59 @@ export function createResvgPngRenderer({ wasmPath = RESVG_WASM_PATH, fontPaths =
   };
 }
 
-export function createOgRenderer({ renderPng, fallbackPng, maxEntries = 200, log = console }) {
+// A process-wide token bucket limits bursts to five and sustains one fresh
+// render per second, even across IPs/renderers. Cached and generic images are free.
+const RENDER_BURST_CAPACITY = 5;
+const TOKEN_REFILL_MS = 1000;
+const BUDGET_EXHAUSTED = new Error('OG fresh-render budget exhausted');
+let renderTokens = RENDER_BURST_CAPACITY;
+let lastTokenRefillAt = Date.now();
+
+function takeRenderBudget() {
+  const time = Date.now();
+  renderTokens = Math.min(RENDER_BURST_CAPACITY, renderTokens + Math.max(0, time - lastTokenRefillAt) / TOKEN_REFILL_MS);
+  lastTokenRefillAt = time;
+  if (renderTokens < 1) return false;
+  renderTokens -= 1;
+  return true;
+}
+
+function genericOgSvg() {
+  return frame(
+    text('Discover what is rising.', { x: 80, y: 280, size: 60, weight: 600 })
+      + text('Trending GitHub projects on Trendar', { x: 80, y: 370, size: 32, fill: MUTED }),
+    'Live GitHub star velocity on Trendar',
+  );
+}
+
+export function createOgRenderer({ renderPng, fallbackPng, maxEntries = 2000, log = console }) {
   const cache = createTtlCache({ ttlMs: Infinity, maxEntries });
+  let genericPng = null;
+
+  // Memoize both success and failure: unknown URLs must never cause fresh work.
+  // fallbackPng remains the supplied static image, used only if resvg fails.
+  function getFallbackPng() {
+    if (!genericPng) {
+      genericPng = setImmediate().then(() => renderPng(genericOgSvg())).catch((error) => {
+        log.error('[public] generic og render failed', { message: error?.message });
+        return fallbackPng;
+      });
+    }
+    return genericPng;
+  }
+
   async function render({ key, revision, svg }) {
     try {
-      const buffer = await cache.getOrCompute(`${key}:${revision}`, () => renderPng(svg));
+      const buffer = await cache.getOrCompute(`${key}:${revision}`, async () => {
+        if (!takeRenderBudget()) throw BUDGET_EXHAUSTED;
+        await setImmediate();
+        return renderPng(svg);
+      });
       return { buffer, fallback: false };
     } catch (error) {
-      log.error('[public] og render failed', { key, message: error?.message });
-      return { buffer: fallbackPng, fallback: true };
+      if (error !== BUDGET_EXHAUSTED) log.error('[public] og render failed', { key, message: error?.message });
+      return { buffer: await getFallbackPng(), fallback: true };
     }
   }
-  return { render, fallbackPng };
+  return { render, fallbackPng, getFallbackPng };
 }

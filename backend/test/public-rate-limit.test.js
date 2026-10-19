@@ -60,3 +60,21 @@ test('rate limiter uses keyOf', () => {
   assert.equal(run('x'), false);
   assert.equal(run('y'), true);
 });
+
+test('limited badges remain neutral SVGs while OG requests keep 429', () => {
+  const limiter = createRateLimiter({ limit: 1, now: () => 0 });
+  assert.equal(hit(limiter, 'shared-proxy').passed, true);
+  const badge = mockRes();
+  limiter({ ip: 'shared-proxy', baseUrl: '/badge', path: '/acme/rocket.svg' }, badge, () => assert.fail('limited badge passed'));
+  assert.equal(badge.statusCode, 200);
+  assert.equal(badge.headers['cache-control'], 'no-store');
+  assert.equal(badge.headers['retry-after'], '60');
+  assert.equal(badge.headers['content-type'], 'image/svg+xml; charset=utf-8');
+  assert.match(badge.body, /^<svg/);
+  assert.match(badge.body, /GitHub trend radar/);
+  assert.doesNotMatch(badge.body, /Trending #/);
+  const og = mockRes();
+  limiter({ ip: 'shared-proxy', baseUrl: '/og', path: '/trending.png' }, og, () => assert.fail('limited OG passed'));
+  assert.equal(og.statusCode, 429);
+  assert.equal(og.headers['content-type'], 'text/plain');
+});

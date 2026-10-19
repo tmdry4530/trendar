@@ -105,3 +105,37 @@ test('cleared or deleted in-flight results do not repopulate the cache', async (
     assert.equal(cache.get('a'), 2);
   }
 });
+
+test('dependent results expire no later than the cache entries they were derived from', async () => {
+  const { cache, advance } = fixture(5);
+  await cache.getOrCompute('source', () => 'v1');
+  advance(9);
+  let calls = 0;
+  const derive = async ({ dependsOn }) => {
+    calls++;
+    const source = await cache.getOrCompute('source', () => 'v2');
+    dependsOn('source');
+    return `derived:${source}`;
+  };
+  assert.equal(await cache.getOrCompute('derived', derive), 'derived:v1');
+  assert.equal(await cache.getOrCompute('derived', derive), 'derived:v1');
+  assert.equal(calls, 1);
+  advance(1);
+  assert.equal(await cache.getOrCompute('derived', derive), 'derived:v2');
+  assert.equal(calls, 2);
+  advance(9);
+  assert.equal(await cache.getOrCompute('derived', derive), 'derived:v2');
+  assert.equal(calls, 2);
+});
+
+test('missing dependencies are not cached and longer dependencies never extend the own TTL', async () => {
+  const { cache, advance } = fixture();
+  await cache.getOrCompute('a', ({ dependsOn }) => { dependsOn('long'); return 1; });
+  assert.equal(cache.get('a'), undefined);
+  cache.set('long', 0, 100);
+  await cache.getOrCompute('a', ({ dependsOn }) => { dependsOn('long'); return 2; });
+  advance(9);
+  assert.equal(cache.get('a'), 2);
+  advance(1);
+  assert.equal(cache.get('a'), undefined);
+});

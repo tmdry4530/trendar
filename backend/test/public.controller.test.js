@@ -250,10 +250,72 @@ test('other /ko paths fall through to the SPA', async () => {
   });
 });
 
-test('data failures are passed to the error handler', async () => {
-  await withServer({ data: fakeData({ failFeed: true }) }, async ({ get }) => {
+test('public page data failures return uncacheable HTML 503 without internal details', async () => {
+  const data = fakeData({ failFeed: true });
+  data.getRepo = async () => { throw new Error('db down: secret connection details'); };
+  await withServer({ data }, async ({ get }) => {
+    for (const path of ['/', '/ko', '/trending', '/trending/language/python', '/trending/topic/llm', '/repo/acme/rocket', '/ko/trending', '/ko/repo/acme/rocket']) {
+      const response = await get(path);
+      assert.equal(response.status, 503, path);
+      assert.equal(response.headers.get('cache-control'), 'no-store', path);
+      assert.match(response.headers.get('content-type'), /^text\/html/, path);
+      const html = await response.text();
+      assert.match(html, /<!doctype html>/i, path);
+      assert.match(html, /Trendar/, path);
+      assert.doesNotMatch(html, /db down|secret connection/, path);
+    }
+  });
+});
+
+test('public HTML rendering errors return 503 rather than forwarding JSON failures', async () => {
+  const data = fakeData();
+  data.getFeedIndex = async () => ({ not: 'an iterable feed index' });
+  await withServer({ data }, async ({ get }) => {
     const response = await get('/trending');
-    assert.equal(response.status, 500);
-    assert.equal(await response.text(), 'db down');
+    assert.equal(response.status, 503);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.match(response.headers.get('content-type'), /^text\/html/);
+  });
+});
+
+test('public page client errors preserve status/statusCode while unknown and server errors become 503', async () => {
+  for (const [properties, expected] of [
+    [{ status: 400 }, 400],
+    [{ statusCode: 403 }, 403],
+    [{ status: 404 }, 404],
+    [{ status: 429 }, 429],
+    [{ status: 500 }, 503],
+    [{ statusCode: 502 }, 503],
+    [{}, 503],
+  ]) {
+    const data = fakeData();
+    data.getFeed = async () => { throw Object.assign(new Error('private exception details'), properties); };
+    await withServer({ data }, async ({ get }) => {
+      const response = await get('/trending');
+      assert.equal(response.status, expected, JSON.stringify(properties));
+      assert.equal(response.headers.get('cache-control'), 'no-store');
+      assert.match(response.headers.get('content-type'), /^text\/html/);
+      const html = await response.text();
+      assert.match(html, /<meta name="robots" content="noindex">/);
+      assert.doesNotMatch(html, /private exception details/);
+      if (expected < 500) {
+        assert.match(html, new RegExp(String(expected)));
+        assert.doesNotMatch(html, /temporarily unavailable/);
+      }
+    });
+  }
+});
+
+test('public page URIError without an explicit status becomes HTML 400', async () => {
+  const data = fakeData();
+  data.getFeed = async () => { throw new URIError('private decoding details'); };
+  await withServer({ data }, async ({ get }) => {
+    const response = await get('/trending');
+    assert.equal(response.status, 400);
+    assert.equal(response.headers.get('cache-control'), 'no-store');
+    assert.match(response.headers.get('content-type'), /^text\/html/);
+    const html = await response.text();
+    assert.match(html, /<meta name="robots" content="noindex">/);
+    assert.doesNotMatch(html, /private decoding details|temporarily unavailable/);
   });
 });

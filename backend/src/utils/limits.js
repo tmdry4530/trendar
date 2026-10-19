@@ -11,6 +11,8 @@ const DEFAULT_RISING_MIN_RATE = 100;
 const DEFAULT_RISING_MIN_GROWTH = 0.10;
 const DEFAULT_RISING_ABS_PASS = 500;
 const DEFAULT_SEARCH_INTERVAL_MS = 2100;
+// GitHub Search API 30회/분 한도(R2.4): 설정값이 더 작아도 이 간격 미만으로는 호출하지 않는다.
+const MIN_SEARCH_INTERVAL_MS = 2100;
 const DEFAULT_PUBLIC_IMAGE_RATE_LIMIT_PER_MIN = 120;
 const DEFAULT_PUBLIC_ANALYTICS_FLUSH_MS = 60000;
 const DEFAULT_TRUST_PROXY_HOPS = 1;
@@ -83,7 +85,7 @@ export function risingAbsPass() {
 export function searchIntervalMs() {
   const parsed = Number(process.env.ETL_SEARCH_INTERVAL_MS);
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_SEARCH_INTERVAL_MS;
-  return parsed;
+  return Math.max(parsed, MIN_SEARCH_INTERVAL_MS);
 }
 
 export function publicImageRateLimitPerMin() {

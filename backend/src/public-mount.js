@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import * as publicModel from './models/public.model.js';
 import { hasValidByHash } from './models/session.model.js';
 import { allFeeds } from './config/public-feeds.js';
-import { createPublicController } from './controllers/public.controller.js';
+import { createPublicController, publicErrorHandler } from './controllers/public.controller.js';
 import { SESSION_COOKIE } from './middleware/requireAuth.js';
 import { createRateLimiter } from './middleware/public-rate-limit.js';
 import { createPublicAssetsRouter } from './routes/public-assets.routes.js';
@@ -31,7 +31,10 @@ function createIsAuthenticated(hasValidSession) {
     try {
       return await hasValidSession(hashSessionToken(token));
     } catch {
-      return false;
+      // This is only a public-root routing hint, never API authorization.
+      // Preserve the SPA during a session-store outage instead of querying
+      // the same unavailable DB again to render the anonymous landing.
+      return true;
     }
   };
 }
@@ -61,7 +64,7 @@ export function createPublicDeps(overrides = {}) {
     return created;
   });
   const rateLimit = pick('rateLimit', () => createRateLimiter({ limit: publicImageRateLimitPerMin() }));
-  const isAuthenticated = pick('isAuthenticated', () => createIsAuthenticated(hasValidByHash));
+  const isAuthenticated = pick('isAuthenticated', () => createIsAuthenticated(pick('hasValidSession', () => hasValidByHash)));
   const sitemapHandler = pick('sitemapHandler', () => createSitemapHandler({ data, appUrl }));
   const pagesRouter = pick('pagesRouter', () => createPublicRouter({
     controller: createPublicController({ data, feeds, appUrl, isAuthenticated }),
@@ -77,4 +80,5 @@ export function mountPublic(app, deps) {
   app.use(deps.assetsRouter);
   app.use('/ko', setLocale('ko'), deps.pagesRouter);
   app.use(setLocale('en'), deps.pagesRouter);
+  app.use(publicErrorHandler);
 }

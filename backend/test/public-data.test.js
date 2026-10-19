@@ -92,6 +92,40 @@ test('repository best uses minimum rank, loads 30 days and measures without expo
   assert.equal(calls.findPublicRepo.length, 1);
 });
 
+test('repository view never outlives the cached feed views its ranks came from', async () => {
+  const rows = [[row(21, 1), row(11, 2)], [row(22, 1), row(11, 2)], [row(11, 1)]];
+  const { data, calls, advance } = fixture({ rows });
+  for (const feed of feeds) await data.getFeed(feed.kind, feed.slug);
+  advance(599_999);
+  const stale = await data.getRepo('Owner', 'Repo');
+  assert.deepEqual(stale.best, { kind: 'topic', slug: 'ai', name: feeds[2].name, rank: 1 });
+  rows[0] = [row(11, 1)];
+  rows[1] = [];
+  rows[2] = [];
+  advance(2);
+  const refreshed = await data.getRepo('Owner', 'Repo');
+  assert.notEqual(refreshed, stale);
+  assert.deepEqual(refreshed.best, { kind: 'all', slug: 'all', name: feeds[0].name, rank: 1 });
+  assert.deepEqual(refreshed.feeds.map((feed) => feed.rank), [1, null, null]);
+  assert.equal(calls.findPublicRepo.length, 2);
+  advance(599_998);
+  assert.equal(await data.getRepo('Owner', 'Repo'), refreshed);
+});
+
+test('feed view never outlives the cached feed runs it was built from', async () => {
+  const { data, runs, advance } = fixture();
+  await data.getFeedIndex();
+  advance(599_999);
+  const stale = await data.getFeed('all', 'all');
+  assert.deepEqual(stale.feed.last_success_at, NOW);
+  const refreshedAt = new Date(NOW.getTime() + 600_000);
+  runs[0] = { ...runs[0], last_success_at: refreshedAt };
+  advance(2);
+  const refreshed = await data.getFeed('all', 'all');
+  assert.deepEqual(refreshed.feed.last_success_at, refreshedAt);
+  assert.notEqual(refreshed.revision, stale.revision);
+});
+
 test('best ties prefer all, then language, then topic, then lexical slug', async () => {
   const allTie = fixture({ rows: [[row(11, 1)], [row(11, 1)], [row(11, 1)]] });
   assert.equal((await allTie.data.getRepo('Owner', 'Repo')).best.kind, 'all');
