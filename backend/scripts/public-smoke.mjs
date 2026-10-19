@@ -23,7 +23,7 @@ const REPO_COUNT = 1000;
 const PERF_SAMPLES = 50;
 const PERF_P95_LIMIT_MS = 300;
 const USER_AGENT = 'trendar-smoke-bot/1.0';
-const PUBLIC_TABLES = ['public_feeds', 'public_repos', 'public_repo_snapshots', 'public_feed_repos', 'public_daily_metrics'];
+const PUBLIC_TABLES = ['public_feeds', 'public_repos', 'public_repo_snapshots', 'public_feed_repos', 'public_daily_metrics', 'public_rank_history'];
 
 const failures = [];
 function check(name, ok, detail = '') {
@@ -53,7 +53,7 @@ async function verifySchema() {
     `SELECT TABLE_NAME AS name FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME LIKE 'public\\_%' ORDER BY TABLE_NAME`
   );
   const names = tables.map((row) => row.name);
-  check('initDb x2 creates 5 public tables', PUBLIC_TABLES.every((t) => names.includes(t)) && names.length === 5, names.join(','));
+  check(`initDb x2 creates ${PUBLIC_TABLES.length} public tables`, PUBLIC_TABLES.every((t) => names.includes(t)) && names.length === PUBLIC_TABLES.length, names.join(','));
   const [[subscriptions]] = await pool.query(
     `SELECT COUNT(*) AS n FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'subscriptions'`
   );
@@ -208,18 +208,26 @@ async function measureFeed(get) {
   check(`p95 < ${PERF_P95_LIMIT_MS}ms`, p95 < PERF_P95_LIMIT_MS, `p95=${p95.toFixed(1)}`);
 }
 
+// 배지는 한도를 넘어도 README가 깨지지 않게 200 중립 배지를 no-store로 주고, OG는 429를 준다.
 async function rateLimitCheck(get) {
-  let limited = 0;
-  let retryAfter = null;
+  let neutral = 0;
   for (let i = 0; i < 125; i += 1) {
     const res = await get('/badge/a/b.svg');
+    await res.arrayBuffer();
+    if (res.status === 200 && res.headers.get('cache-control') === 'no-store') neutral += 1;
+  }
+  check('/badge over limit → 200 neutral no-store', neutral >= 1, `neutral=${neutral}`);
+  let limited = 0;
+  let retryAfter = null;
+  for (let i = 0; i < 5; i += 1) {
+    const res = await get('/og/repo/a/b.png');
     await res.arrayBuffer();
     if (res.status === 429) {
       limited += 1;
       retryAfter ??= res.headers.get('retry-after');
     }
   }
-  check('/badge 125 requests → 429 at least once', limited >= 1, `429=${limited} retry-after=${retryAfter}`);
+  check('/og over limit → 429', limited >= 1, `429=${limited} retry-after=${retryAfter}`);
 }
 
 async function main() {
