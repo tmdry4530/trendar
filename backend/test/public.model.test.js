@@ -169,3 +169,15 @@ test('일별 집계는 다중 행 INSERT 1회로 누적하고 빈 배치는 조�
   assert.deepEqual(calls[0].params, ['2026-10-19', 'page_view', 'trending', 'en', 'github.com', 0, 4, '2026-10-19', 'signup', 'repo', 'ko', '', 0, 2]);
   await withQueries([], () => Public.addDailyMetrics([]));
 });
+
+test('순위 기록은 같은 실행을 다시 넣어도 중복되지 않게 INSERT IGNORE 1회로 저장한다', async () => {
+  const rows = [
+    { id: 7, rank: 1, stars: 1500, rate_24h: 1800, baseline_source: 'creation' },
+    { id: 8, rank: 2, stars: 900, rate_24h: 420.5, baseline_source: 'snapshot' },
+  ];
+  const { calls } = await withQueries([{}], () => Public.insertRankHistory(3, NOW, rows));
+  assert.equal(calls.length, 1);
+  assert.match(calls[0].sql, /^INSERT IGNORE INTO public_rank_history/);
+  assert.deepEqual(calls[0].params, [3, 7, NOW, 1, 1500, 1800, 'creation', 3, 8, NOW, 2, 900, 420.5, 'snapshot']);
+  await withQueries([], () => Public.insertRankHistory(3, NOW, []));
+});

@@ -2,6 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createPublicCollector } from '../src/etl/public-pipeline.js';
+import { rankRising } from '../src/services/rising-score.js';
 import { buildPublicSearchQuery, searchPublicRepos, createPacer } from '../src/etl/public-extract.js';
 import { normalizeRepo } from '../src/etl/transform.js';
 import { allFeeds, feedKey } from '../src/config/public-feeds.js';
@@ -33,6 +34,11 @@ function fixture(overrides = {}) {
     upsertFeedMembership: async (...args) => { record('upsertFeedMembership', ...args); },
     markFeedAttempt: async (...args) => { record('markFeedAttempt', ...args); },
     markFeedResult: async (...args) => { record('markFeedResult', ...args); },
+    feedCandidates: async (...args) => { record('feedCandidates', ...args); return overrides.candidates?.(args[0]) ?? []; },
+    insertRankHistory: async (...args) => {
+      record('insertRankHistory', ...args);
+      if (overrides.insertRankHistory) await overrides.insertRankHistory(...args);
+    },
   };
   const octokit = { rest: { search: { repos: async (options) => {
     calls.searches.push({ ...options, startedAt: clock });
@@ -48,6 +54,7 @@ function fixture(overrides = {}) {
       clock += ms;
     } }),
     windowDays: 15, minStars: 20, now: () => new Date(clock),
+    rankRising, risingConfig: { windowDays: 15, freshHours: 13, minRate: 100, minGrowth: 0.1, absPass: 500 },
     log: { warn: (...args) => calls.warnings.push(args), error: (...args) => calls.errors.push(args) },
     ...overrides.deps,
   };
@@ -62,7 +69,7 @@ test('공개 수집: 기본 33개 피드를 설정 순서대로 검색하고 시
   const { runner, calls } = fixture({ feeds: FEEDS });
   const result = await runner.runPublicCollection();
   assert.deepEqual(result, {
-    feeds_total: 33, feeds_ok: 33, feeds_failed: 0, repos_upserted: 0, snapshots_inserted: 0, aborted: false,
+    feeds_total: 33, feeds_ok: 33, feeds_failed: 0, repos_upserted: 0, snapshots_inserted: 0, ranks_recorded: 0, aborted: false,
   });
   assert.equal(calls.searches.length, 33);
   calls.searches.forEach((call, index) => {
@@ -292,4 +299,59 @@ test('공개 수집: 401 실패 기록이 실패해도 남은 피드를 중단�
   assert.equal(calls.searches.length, 1);
   assert.equal(calls.errors.length, 2);
   assert.equal(runner.isPublicCollectionRunning(), false);
+});
+
+function candidate(id, stars) {
+  return {
+    id, github_id: id, full_name: `octo/repo-${id}`, owner: 'octo', name: `repo-${id}`,
+    github_created_at: new Date(NOW - 20 * 3600000),
+    snapshots: [{ id: id * 10, stars, captured_at: new Date(NOW) }],
+    earliest: { id: id * 10, stars, captured_at: new Date(NOW) },
+  };
+}
+
+test('순위 기록: 성공한 피드마다 실행 시작 시각으로 상위 순위를 저장한다', async () => {
+  const { runner, calls } = fixture({
+    feeds: FEEDS.slice(0, 2),
+    search: (index) => {
+      if (index === 2) throw Object.assign(new Error('search failed'), { status: 500 });
+      return [];
+    },
+    candidates: () => [candidate(2, 200), candidate(1, 1500)],
+  });
+  const result = await runner.runPublicCollection();
+  const inserts = modelCalls(calls, 'insertRankHistory');
+  assert.equal(inserts.length, 1);
+  const [feedId, capturedAt, rows] = inserts[0];
+  assert.equal(feedId, 1);
+  assert.equal(capturedAt.getTime(), NOW);
+  assert.deepEqual(rows.map((row) => [row.id, row.rank, row.baseline_source]), [[1, 1, 'creation'], [2, 2, 'creation']]);
+  assert.equal(result.ranks_recorded, 2);
+});
+
+test('순위 기록: 한 피드의 저장 실패는 다른 피드 기록과 수집 결과를 막지 않는다', async () => {
+  const { runner, calls } = fixture({
+    feeds: FEEDS.slice(0, 2),
+    candidates: () => [candidate(1, 1500)],
+    insertRankHistory: async (feedId) => { if (feedId === 1) throw new Error('DB unavailable'); },
+  });
+  const result = await runner.runPublicCollection();
+  assert.equal(result.feeds_ok, 2);
+  assert.equal(result.ranks_recorded, 1);
+  assert.equal(modelCalls(calls, 'insertRankHistory').length, 2);
+  assert.equal(calls.errors.length, 1);
+  assert.equal(runner.isPublicCollectionRunning(), false);
+});
+
+test('순위 기록: 401로 중단된 실행은 순위를 남기지 않는다', async () => {
+  const { runner, calls } = fixture({
+    search: (index) => {
+      if (index === 2) throw Object.assign(new Error('Bad credentials'), { status: 401 });
+      return [];
+    },
+    candidates: () => [candidate(1, 1500)],
+  });
+  const result = await runner.runPublicCollection();
+  assert.equal(result.aborted, true);
+  assert.equal(modelCalls(calls, 'insertRankHistory').length, 0);
 });
