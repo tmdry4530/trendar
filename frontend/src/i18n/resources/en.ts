@@ -32,6 +32,7 @@ export const en = {
     dashboard: 'Dashboard',
     filters: 'Collection filters',
     projects: 'Projects',
+    trending: 'Trending', // nav.trending — 공개 트렌드 링크(public-trending R5.3)
     sampleData: 'Sample data',
     sampleDataMode: 'Sample data mode',
     accountMenu: '{{user}} account menu',

@@ -12,48 +12,58 @@ import localizationRoutes from './routes/localization.routes.js';
 import billingRoutes from './routes/billing.routes.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
+import { createPublicDeps, mountPublic } from './public-mount.js';
+import { trustProxyHops } from './utils/limits.js';
 
-const app = express();
+export function createApp({ publicDeps = createPublicDeps() } = {}) {
+  const app = express();
 
-app.disable('x-powered-by');
-app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      connectSrc: ["'self'"],
-      frameAncestors: ["'none'"],
-      imgSrc: ["'self'", 'data:', 'https:'],
-      upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+  app.disable('x-powered-by');
+  app.set('trust proxy', trustProxyHops());
+  app.use(helmet({
+    contentSecurityPolicy: {
+      directives: {
+        connectSrc: ["'self'"],
+        frameAncestors: ["'none'"],
+        imgSrc: ["'self'", 'data:', 'https:'],
+        upgradeInsecureRequests: process.env.NODE_ENV === 'production' ? [] : null,
+      },
     },
-  },
-  crossOriginEmbedderPolicy: false,
-  frameguard: { action: 'deny' },
-}));
-// Paddle 웹훅 서명 검증에는 raw body가 필요하므로, JSON 파서보다 먼저 등록한다.
-app.use('/api/billing/webhook', express.raw({ type: 'application/json', limit: '1mb' }));
-app.use(express.json());
-app.use(cookieParser());
+    crossOriginEmbedderPolicy: false,
+    frameguard: { action: 'deny' },
+  }));
+  // Paddle 웹훅 서명 검증에는 raw body가 필요하므로, JSON 파서보다 먼저 등록한다.
+  app.use('/api/billing/webhook', express.raw({ type: 'application/json', limit: '1mb' }));
+  app.use(express.json());
+  app.use(cookieParser());
 
-app.get('/api/health', (req, res) => res.json({ ok: true }));
+  app.get('/api/health', (req, res) => res.json({ ok: true }));
 
-app.use('/api/localization', localizationRoutes);
-app.use('/api/auth', authRoutes);
-// Paddle 웹훅은 세션이 아닌 Paddle-Signature로 인증한다.
-app.use('/api/billing', billingRoutes);
-app.use('/api/queries', requireAuth, queryRoutes);
-app.use('/api/repos', requireAuth, repoRoutes);
-app.use('/api/etl', requireAuth, etlRoutes);
-app.use('/api', requireAuth, statsRoutes);
+  app.use('/api/localization', localizationRoutes);
+  app.use('/api/auth', authRoutes);
+  // Paddle 웹훅은 세션이 아닌 Paddle-Signature로 인증한다.
+  app.use('/api/billing', billingRoutes);
+  app.use('/api/queries', requireAuth, queryRoutes);
+  app.use('/api/repos', requireAuth, repoRoutes);
+  app.use('/api/etl', requireAuth, etlRoutes);
+  app.use('/api', requireAuth, statsRoutes);
 
-if (process.env.NODE_ENV === 'production') {
-  const __dirname = path.dirname(fileURLToPath(import.meta.url));
-  const dist = path.resolve(__dirname, '../../frontend/dist');
-  app.use(express.static(dist));
-  app.get('*', (req, res, next) => {
-    if (req.path.startsWith('/api')) return next();
-    res.sendFile(path.join(dist, 'index.html'));
-  });
+  // 공개 SSR·이미지 라우트는 SPA 정적 서빙보다 먼저 응답해야 한다(`/`, `/sitemap.xml` 포함).
+  mountPublic(app, publicDeps);
+
+  if (process.env.NODE_ENV === 'production') {
+    const __dirname = path.dirname(fileURLToPath(import.meta.url));
+    const dist = path.resolve(__dirname, '../../frontend/dist');
+    app.use(express.static(dist));
+    app.get('*', (req, res, next) => {
+      if (req.path.startsWith('/api')) return next();
+      res.sendFile(path.join(dist, 'index.html'));
+    });
+  }
+
+  app.use(errorHandler);
+
+  return app;
 }
 
-app.use(errorHandler);
-
-export default app;
+export default createApp();

@@ -30,6 +30,14 @@ export async function findValidByHash(tokenHash) {
   };
 }
 
+export async function hasValidByHash(tokenHash) {
+  const [rows] = await pool.query(
+    'SELECT 1 FROM sessions WHERE token_hash = ? AND expires_at > NOW() LIMIT 1',
+    [tokenHash]
+  );
+  return rows.length > 0;
+}
+
 export async function deleteByHash(tokenHash) {
   const [res] = await pool.query('DELETE FROM sessions WHERE token_hash = ?', [tokenHash]);
   return res.affectedRows > 0;

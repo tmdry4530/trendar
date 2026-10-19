@@ -3,9 +3,11 @@ import { randomBytes } from 'node:crypto';
 import * as oauthService from '../services/github-oauth.js';
 import * as usersModel from '../models/user.model.js';
 import * as sessionsModel from '../models/session.model.js';
+import * as publicModel from '../models/public.model.js';
 import { encryptToken, newSessionToken, hashSessionToken } from '../utils/crypto.js';
 import { SESSION_COOKIE } from '../middleware/requireAuth.js';
 import { effectivePlan } from '../services/billing.js';
+import { createSignupAttribution } from '../services/public-analytics.js';
 
 const OAUTH_STATE_COOKIE = 'oauth_state';
 const STATE_TTL_MS = 10 * 60 * 1000;
@@ -24,17 +26,21 @@ function cookieOpts(maxAge) {
 export function createAuthController(deps) {
   const { oauth, users, sessions, crypto } = deps;
   const planOf = deps.effectivePlan || effectivePlan;
+  const attribution =
+    deps.attribution || createSignupAttribution({ addDailyMetrics: publicModel.addDailyMetrics });
 
   function login(req, res) {
     const state = randomBytes(32).toString('hex');
     res.cookie(OAUTH_STATE_COOKIE, state, cookieOpts(STATE_TTL_MS));
+    attribution.remember(res, { from: req.query.from, locale: req.query.locale });
     res.redirect(oauth.buildAuthorizeUrl({ state }));
   }
 
   async function callback(req, res, next) {
-    // state 쿠키는 결과와 무관하게 1회성으로 소비한다.
+    // state·진입 경로 쿠키는 결과와 무관하게 1회성으로 소비한다.
     const stateCookie = req.cookies?.[OAUTH_STATE_COOKIE];
     res.clearCookie(OAUTH_STATE_COOKIE);
+    const entry = attribution.consume(req, res);
 
     if (req.query.error) return res.redirect('/login?error=denied');
 
@@ -72,6 +78,11 @@ export function createAuthController(deps) {
       const expiresAt = new Date(Date.now() + ttlMs);
       await sessions.create(user.id, hash, expiresAt);
       res.cookie(SESSION_COOKIE, token, cookieOpts(ttlMs));
+      if (entry) {
+        await attribution
+          .record(entry)
+          .catch((e) => console.error('[auth] attribution failed', e.code ?? e.message));
+      }
       return res.redirect('/');
     } catch (err) {
       return next(err);

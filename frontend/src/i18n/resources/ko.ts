@@ -29,6 +29,7 @@ export const ko = {
     dashboard: '대시보드',
     filters: '수집 조건',
     projects: '프로젝트',
+    trending: '트렌드', // nav.trending — 공개 트렌드 링크(public-trending R5.3)
     sampleData: '예시 데이터',
     sampleDataMode: '예시 데이터 모드',
     accountMenu: '{{user}} 계정 메뉴',

@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom';
 import { USE_MOCK } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useTranslation } from 'react-i18next';
+import { toSupportedLocale } from '../i18n';
 import ConfirmDialog from './ConfirmDialog';
 import LanguageSwitcher from './LanguageSwitcher';
 import styles from './TopNav.module.css';
@@ -12,7 +13,8 @@ const linkClass = ({ isActive }: { isActive: boolean }) =>
 
 export default function TopNav() {
   const { me, logout, deleteAccount } = useAuth();
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
+  const locale = toSupportedLocale(i18n.resolvedLanguage) ?? 'en';
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -72,6 +74,9 @@ export default function TopNav() {
             <NavLink to="/repos" className={linkClass}>
               {t('nav.projects')}
             </NavLink>
+            <a href={locale === 'ko' ? '/ko/trending' : '/trending'} className={styles.link}>
+              {t('nav.trending')}
+            </a>
           </nav>
 
           <div className={styles.language}>

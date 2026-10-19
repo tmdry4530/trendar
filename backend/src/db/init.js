@@ -83,11 +83,70 @@ async function migrateBillingSchema() {
   )`);
 }
 
+async function migratePublicSchema() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS public_feeds (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    kind ENUM('all','language','topic') NOT NULL,
+    slug VARCHAR(64) NOT NULL,
+    last_attempt_at DATETIME NULL,
+    last_success_at DATETIME NULL,
+    last_status ENUM('ok','error') NULL,
+    last_error_code VARCHAR(64) NULL,
+    UNIQUE KEY uq_kind_slug (kind, slug)
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS public_repos (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    github_id BIGINT NOT NULL,
+    full_name VARCHAR(255) NOT NULL,
+    owner VARCHAR(120) NOT NULL,
+    name VARCHAR(160) NOT NULL,
+    html_url VARCHAR(255),
+    description TEXT,
+    language VARCHAR(50),
+    stars INT NOT NULL DEFAULT 0,
+    github_created_at DATETIME NULL,
+    first_seen_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    UNIQUE KEY uq_github (github_id),
+    KEY idx_owner_name (owner, name),
+    KEY idx_created (github_created_at)
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS public_repo_snapshots (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    repo_id INT NOT NULL,
+    stars INT NOT NULL,
+    forks INT, open_issues INT, watchers INT,
+    captured_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_repo_time (repo_id, captured_at, id),
+    CONSTRAINT fk_psnap_repo FOREIGN KEY (repo_id) REFERENCES public_repos(id) ON DELETE CASCADE
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS public_feed_repos (
+    feed_id INT NOT NULL, repo_id INT NOT NULL,
+    last_seen_at DATETIME NOT NULL,
+    PRIMARY KEY (feed_id, repo_id), KEY idx_feed_seen (feed_id, last_seen_at), KEY idx_repo (repo_id),
+    CONSTRAINT fk_pfr_feed FOREIGN KEY (feed_id) REFERENCES public_feeds(id) ON DELETE CASCADE,
+    CONSTRAINT fk_pfr_repo FOREIGN KEY (repo_id) REFERENCES public_repos(id) ON DELETE CASCADE
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS public_daily_metrics (
+    day DATE NOT NULL,
+    event_kind ENUM('page_view','signup') NOT NULL,
+    path_template VARCHAR(32) NOT NULL,
+    locale CHAR(2) NOT NULL,
+    referrer_domain VARCHAR(255) NOT NULL DEFAULT '',
+    is_bot TINYINT(1) NOT NULL DEFAULT 0,
+    event_count INT UNSIGNED NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, event_kind, path_template, locale, referrer_domain, is_bot)
+  )`);
+}
+
 export async function initDb() {
   await dropLegacySchema();
   await migrateUsersColumns();
   await migrateReposColumns();
-  await migrateBillingSchema();
 
   await pool.query(`CREATE TABLE IF NOT EXISTS users (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -106,6 +165,8 @@ export async function initDb() {
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE KEY uq_github_id (github_id)
   )`);
+
+  await migrateBillingSchema();
 
   await pool.query(`CREATE TABLE IF NOT EXISTS sessions (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -168,4 +229,6 @@ export async function initDb() {
     KEY idx_repo_time (repo_id, captured_at),
     CONSTRAINT fk_snap_repo FOREIGN KEY (repo_id) REFERENCES repos(id) ON DELETE CASCADE
   )`);
+
+  await migratePublicSchema();
 }

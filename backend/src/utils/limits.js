@@ -7,6 +7,13 @@ const DEFAULT_TREND_WINDOW_DAYS = 90;
 const DEFAULT_TREND_MIN_STARS = 50;
 const DEFAULT_RISING_WINDOW_DAYS = 15;
 const DEFAULT_RISING_MIN_DELTA = 500;
+const DEFAULT_RISING_MIN_RATE = 100;
+const DEFAULT_RISING_MIN_GROWTH = 0.10;
+const DEFAULT_RISING_ABS_PASS = 500;
+const DEFAULT_SEARCH_INTERVAL_MS = 2100;
+const DEFAULT_PUBLIC_IMAGE_RATE_LIMIT_PER_MIN = 120;
+const DEFAULT_PUBLIC_ANALYTICS_FLUSH_MS = 60000;
+const DEFAULT_TRUST_PROXY_HOPS = 1;
 
 export function maxQueriesPerUser(plan = 'free') {
   if (plan === 'pro') {
@@ -53,6 +60,62 @@ export function risingMinDelta() {
   const parsed = Number(process.env.RISING_MIN_DELTA);
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_RISING_MIN_DELTA;
   return parsed;
+}
+
+export function risingMinRate() {
+  const parsed = Number(process.env.RISING_MIN_RATE);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_RISING_MIN_RATE;
+  return parsed;
+}
+
+export function risingMinGrowth() {
+  const parsed = Number(process.env.RISING_MIN_GROWTH);
+  if (!Number.isFinite(parsed) || parsed <= 0) return DEFAULT_RISING_MIN_GROWTH;
+  return parsed;
+}
+
+export function risingAbsPass() {
+  const parsed = Number(process.env.RISING_ABS_PASS);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_RISING_ABS_PASS;
+  return parsed;
+}
+
+export function searchIntervalMs() {
+  const parsed = Number(process.env.ETL_SEARCH_INTERVAL_MS);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_SEARCH_INTERVAL_MS;
+  return parsed;
+}
+
+export function publicImageRateLimitPerMin() {
+  const parsed = Number(process.env.PUBLIC_IMAGE_RATE_LIMIT_PER_MIN);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_PUBLIC_IMAGE_RATE_LIMIT_PER_MIN;
+  return parsed;
+}
+
+export function publicAnalyticsFlushMs() {
+  const parsed = Number(process.env.PUBLIC_ANALYTICS_FLUSH_MS);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_PUBLIC_ANALYTICS_FLUSH_MS;
+  return parsed;
+}
+
+export function trustProxyHops() {
+  const raw = process.env.TRUST_PROXY_HOPS;
+  const parsed = Number(raw);
+  if (raw === undefined || raw.trim() === '' || !Number.isInteger(parsed) || parsed < 0) {
+    return DEFAULT_TRUST_PROXY_HOPS;
+  }
+  return parsed;
+}
+
+export function publicRisingConfig() {
+  return {
+    windowDays: risingWindowDays(),
+    freshHours: 13,
+    minRate: risingMinRate(),
+    minGrowth: risingMinGrowth(),
+    absPass: risingAbsPass(),
+    limit: 50,
+  };
 }
 
 export function assertQueryLimit(currentCount, plan = 'free') {
