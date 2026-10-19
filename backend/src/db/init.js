@@ -141,6 +141,20 @@ async function migratePublicSchema() {
     event_count INT UNSIGNED NOT NULL DEFAULT 0,
     PRIMARY KEY (day, event_kind, path_template, locale, referrer_domain, is_bot)
   )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS public_rank_history (
+    feed_id INT NOT NULL,
+    repo_id INT NOT NULL,
+    captured_at DATETIME NOT NULL,
+    \`rank\` SMALLINT UNSIGNED NOT NULL,
+    stars INT NOT NULL,
+    rate_24h DOUBLE NOT NULL,
+    baseline_source ENUM('snapshot','creation','partial') NOT NULL,
+    PRIMARY KEY (feed_id, captured_at, repo_id),
+    KEY idx_repo_rank (repo_id, \`rank\`, captured_at),
+    CONSTRAINT fk_prh_feed FOREIGN KEY (feed_id) REFERENCES public_feeds(id) ON DELETE CASCADE,
+    CONSTRAINT fk_prh_repo FOREIGN KEY (repo_id) REFERENCES public_repos(id) ON DELETE CASCADE
+  )`);
 }
 
 export async function initDb() {

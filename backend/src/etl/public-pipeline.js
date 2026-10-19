@@ -4,7 +4,8 @@ import { Octokit } from '@octokit/rest';
 import { pool } from '../config/db.js';
 import * as publicModel from '../models/public.model.js';
 import { allFeeds, feedKey, PUBLIC_MIN_STARS } from '../config/public-feeds.js';
-import { risingWindowDays, searchIntervalMs } from '../utils/limits.js';
+import { publicRisingConfig, risingWindowDays, searchIntervalMs } from '../utils/limits.js';
+import { rankRising } from '../services/rising-score.js';
 import { normalizeRepo } from './transform.js';
 import { buildPublicSearchQuery, searchPublicRepos, createPacer } from './public-extract.js';
 
@@ -24,7 +25,7 @@ function logFailure(log, key, error, token) {
 
 export function createPublicCollector({
   token, createOctokit, feeds, model, normalizeRepo, searchRepos, buildQuery, pacer,
-  windowDays, minStars, now = () => new Date(), log = console,
+  windowDays, minStars, rankRising, risingConfig, now = () => new Date(), log = console,
 }) {
   function isPublicCollectionRunning() {
     return running;
@@ -52,8 +53,9 @@ export function createPublicCollector({
       const seen = new Set();
       const result = {
         feeds_total: configuredFeeds.length, feeds_ok: 0, feeds_failed: 0,
-        repos_upserted: 0, snapshots_inserted: 0, aborted: false,
+        repos_upserted: 0, snapshots_inserted: 0, ranks_recorded: 0, aborted: false,
       };
+      const collectedFeedIds = [];
 
       for (const feed of configuredFeeds) {
         const key = feedKey(feed.kind, feed.slug);
@@ -77,6 +79,7 @@ export function createPublicCollector({
           }
           await model.markFeedResult(feedId, { status: 'ok', errorCode: null, at: new Date(now()) });
           result.feeds_ok++;
+          collectedFeedIds.push(feedId);
         } catch (error) {
           result.feeds_failed++;
           logFailure(log, key, error, token);
@@ -95,9 +98,24 @@ export function createPublicCollector({
           }
         }
       }
+      if (!result.aborted) await recordRanks(collectedFeedIds, runStartedAt, result);
       return result;
     } finally {
       running = false;
+    }
+  }
+
+  // 순위는 나중에 소급할 수 없으므로 수집 직후의 피드별 상위 50을 실행 시각과 함께 남긴다.
+  async function recordRanks(feedIdList, capturedAt, result) {
+    for (const feedId of feedIdList) {
+      try {
+        const candidates = await model.feedCandidates(feedId, { windowDays });
+        const rows = rankRising(candidates, { ...risingConfig, limit: 50 }, new Date(now()));
+        await model.insertRankHistory(feedId, capturedAt, rows);
+        result.ranks_recorded += rows.length;
+      } catch (error) {
+        logFailure(log, `rank feed=${feedId}`, error, token);
+      }
     }
   }
 
@@ -115,6 +133,8 @@ export const { runPublicCollection, isPublicCollectionRunning } = createPublicCo
   pacer: createPacer({ intervalMs: searchIntervalMs() }),
   windowDays: risingWindowDays(),
   minStars: PUBLIC_MIN_STARS,
+  rankRising,
+  risingConfig: publicRisingConfig(),
 });
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

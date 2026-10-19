@@ -176,3 +176,19 @@ export async function addDailyMetrics(rows) {
       [day, event_kind, path_template, locale, referrer_domain, is_bot, count])
   );
 }
+
+export function buildRankHistoryInsert(feedId, capturedAt, rows) {
+  return {
+    sql: `INSERT IGNORE INTO public_rank_history
+            (feed_id, repo_id, captured_at, \`rank\`, stars, rate_24h, baseline_source)
+          VALUES ${rows.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+    params: rows.flatMap((row) =>
+      [feedId, row.id, capturedAt, row.rank, row.stars, row.rate_24h, row.baseline_source]),
+  };
+}
+
+export async function insertRankHistory(feedId, capturedAt, rows) {
+  if (!rows.length) return;
+  const { sql, params } = buildRankHistoryInsert(feedId, capturedAt, rows);
+  await pool.query(sql, params);
+}
