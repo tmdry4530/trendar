@@ -83,15 +83,15 @@ export async function refundManualEtl(id, today) {
 export function manualUsageFromRow(row, today) {
   if (!row || !row.manual_etl_date) return 0;
   const stored = row.manual_etl_date instanceof Date
-    ? kstDateString(row.manual_etl_date)
+    ? utcDateString(row.manual_etl_date)
     : String(row.manual_etl_date).slice(0, 10);
   return stored === today ? row.manual_etl_count : 0;
 }
 
-// mysql2가 DATE를 Date 객체(로컬 자정)로 돌려줄 때 'YYYY-MM-DD'로 복원
-function kstDateString(d) {
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, '0');
-  const day = String(d.getDate()).padStart(2, '0');
+// mysql2 timezone: 'Z'가 반환한 DATE의 UTC 자정을 'YYYY-MM-DD'로 복원한다.
+function utcDateString(d) {
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const day = String(d.getUTCDate()).padStart(2, '0');
   return `${y}-${m}-${day}`;
 }

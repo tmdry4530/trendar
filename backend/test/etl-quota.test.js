@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { createEtlController } from '../src/controllers/etl.controller.js';
 import { httpError } from '../src/middleware/errorHandler.js';
 import { manualUsageFromRow } from '../src/models/user.model.js';
@@ -173,3 +174,21 @@ test('run — 유효한 query_id는 소비 후 해당 조건만 실행', async (
   assert.equal(calls.consume.length, 1);
   assert.deepEqual(calls.run[0], [7, { queryId: 5 }]);
 });
+
+for (const timezone of ['America/Los_Angeles', 'UTC', 'Asia/Seoul']) {
+  test(`manualUsageFromRow — ${timezone}에서도 mysql2 UTC 자정 DATE의 사용량을 유지한다`, () => {
+    const modelUrl = new URL('../src/models/user.model.js', import.meta.url).href;
+    const script = `
+      import assert from 'node:assert/strict';
+      import { manualUsageFromRow } from ${JSON.stringify(modelUrl)};
+      const row = { manual_etl_date: new Date('2026-07-15T00:00:00.000Z'), manual_etl_count: 1 };
+      assert.equal(manualUsageFromRow(row, '2026-07-15'), 1);
+      assert.equal(manualUsageFromRow(row, '2026-07-16'), 0);
+      assert.equal(manualUsageFromRow({ ...row, manual_etl_date: '2026-07-15' }, '2026-07-15'), 1);
+      assert.equal(manualUsageFromRow(null, '2026-07-15'), 0);
+    `;
+    execFileSync(process.execPath, ['--input-type=module', '-e', script], {
+      env: { ...process.env, TZ: timezone },
+    });
+  });
+}

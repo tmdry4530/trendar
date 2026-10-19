@@ -2,6 +2,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { createAuthController } from '../src/controllers/auth.controller.js';
+import { createSignupAttribution } from '../src/services/public-analytics.js';
 
 function mockRes() {
   const res = {
@@ -183,4 +184,125 @@ test('me: { user: { login, name, avatarUrl }, tokenInvalid, plan } 형태로 응
       plan: 'pro',
     },
   });
+});
+
+function metricsSpy({ fail = false } = {}) {
+  const spy = async (rows) => {
+    spy.calls.push(rows);
+    if (fail) throw Object.assign(new Error('db down'), { code: 'ECONNREFUSED' });
+  };
+  spy.calls = [];
+  return spy;
+}
+
+function successDeps(addDailyMetrics) {
+  return {
+    oauth: {
+      buildAuthorizeUrl: ({ state }) => `https://github.com/login/oauth/authorize?state=${state}`,
+      exchangeCode: async () => 'gho_token',
+      fetchGithubUser: async () => ({ id: 1, login: 'octocat', name: 'Octo', avatar_url: null }),
+    },
+    users: { upsertFromGithub: async () => ({ id: 7 }), deleteById: async () => true },
+    sessions: { create: async () => {}, deleteByHash: async () => {} },
+    crypto: stubCrypto(),
+    attribution: createSignupAttribution({
+      addDailyMetrics,
+      now: () => new Date('2026-10-19T15:30:00Z'),
+    }),
+  };
+}
+
+test('login: 유효한 from·locale → entry_route 쿠키(httpOnly, 10분, locale|template)', () => {
+  const ctrl = createAuthController(successDeps(metricsSpy()));
+  const res = mockRes();
+  ctrl.login({ query: { from: 'trending-topic', locale: 'ko' } }, res);
+  assert.ok(res.cookies.oauth_state, 'state 쿠키는 그대로 설정');
+  assert.equal(res.cookies.entry_route.value, 'ko|trending-topic');
+  assert.equal(res.cookies.entry_route.options.httpOnly, true);
+  assert.equal(res.cookies.entry_route.options.maxAge, 600000);
+  assert.match(res.redirectedTo, /^https:\/\/github\.com\/login\/oauth\/authorize/);
+});
+
+test('login: from이 템플릿 목록 밖이면 entry_route 쿠키 없음', () => {
+  const ctrl = createAuthController(successDeps(metricsSpy()));
+  for (const query of [{ from: '../etc', locale: 'ko' }, { from: 'https://evil', locale: 'en' }, {}]) {
+    const res = mockRes();
+    ctrl.login({ query }, res);
+    assert.equal('entry_route' in res.cookies, false, JSON.stringify(query));
+    assert.ok(res.cookies.oauth_state);
+  }
+});
+
+test('callback: entry_route 쿠키 + OAuth 성공 → signup 집계 1회, 쿠키 clear, / 리다이렉트', async () => {
+  const spy = metricsSpy();
+  const ctrl = createAuthController(successDeps(spy));
+  const req = {
+    query: { state: 'match', code: 'c' },
+    cookies: { oauth_state: 'match', entry_route: 'ko|trending-topic' },
+  };
+  const res = mockRes();
+  await ctrl.callback(req, res, failNext);
+  assert.equal(spy.calls.length, 1);
+  assert.equal(spy.calls[0].length, 1);
+  assert.equal(spy.calls[0][0].event_kind, 'signup');
+  assert.equal(spy.calls[0][0].path_template, 'trending-topic');
+  assert.equal(spy.calls[0][0].locale, 'ko');
+  assert.equal(spy.calls[0][0].day, '2026-10-20');
+  assert.ok(res.cleared.includes('entry_route'));
+  assert.equal(res.cookies.sid.value, 'session-token');
+  assert.equal(res.redirectedTo, '/');
+});
+
+test('callback: entry_route 쿠키 없음 → 집계 0회', async () => {
+  const spy = metricsSpy();
+  const ctrl = createAuthController(successDeps(spy));
+  const req = { query: { state: 'match', code: 'c' }, cookies: { oauth_state: 'match' } };
+  const res = mockRes();
+  await ctrl.callback(req, res, failNext);
+  assert.equal(spy.calls.length, 0);
+  assert.equal(res.redirectedTo, '/');
+});
+
+test('callback: state 불일치 → entry_route 쿠키 clear, 집계 0회', async () => {
+  const spy = metricsSpy();
+  const ctrl = createAuthController(successDeps(spy));
+  const req = {
+    query: { state: 'abc', code: 'c' },
+    cookies: { oauth_state: 'DIFFERENT', entry_route: 'ko|trending-topic' },
+  };
+  const res = mockRes();
+  await ctrl.callback(req, res, failNext);
+  assert.equal(res.redirectedTo, '/login?error=state');
+  assert.ok(res.cleared.includes('entry_route'));
+  assert.equal(spy.calls.length, 0);
+});
+
+test('callback: OAuth 거부(error) 경로에서도 entry_route 쿠키 clear', async () => {
+  const spy = metricsSpy();
+  const ctrl = createAuthController(successDeps(spy));
+  const req = { query: { error: 'access_denied' }, cookies: { entry_route: 'en|landing' } };
+  const res = mockRes();
+  await ctrl.callback(req, res, failNext);
+  assert.equal(res.redirectedTo, '/login?error=denied');
+  assert.ok(res.cleared.includes('entry_route'));
+  assert.equal(spy.calls.length, 0);
+});
+
+test('callback: addDailyMetrics reject여도 세션 쿠키·/ 리다이렉트 유지', async (t) => {
+  const errors = [];
+  t.mock.method(console, 'error', (...a) => errors.push(a));
+  const spy = metricsSpy({ fail: true });
+  const ctrl = createAuthController(successDeps(spy));
+  const req = {
+    query: { state: 'match', code: 'c' },
+    cookies: { oauth_state: 'match', entry_route: 'en|repo' },
+  };
+  const res = mockRes();
+  await ctrl.callback(req, res, failNext);
+  assert.equal(spy.calls.length, 1);
+  assert.equal(res.cookies.sid.value, 'session-token');
+  assert.equal(res.redirectedTo, '/');
+  assert.equal(errors.length, 1);
+  assert.equal(errors[0][0], '[auth] attribution failed');
+  assert.equal(errors[0][1], 'ECONNREFUSED');
 });

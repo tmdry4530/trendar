@@ -102,3 +102,99 @@ Ref: watch_queries.user_id > users.id [delete: cascade]
 Ref: repos.user_id > users.id [delete: cascade]
 Ref: repos.query_id > watch_queries.id [delete: cascade]
 Ref: repo_snapshots.repo_id > repos.id [delete: cascade]
+
+enum public_feed_kind {
+  all
+  language
+  topic
+}
+
+enum public_feed_status {
+  ok
+  error
+}
+
+enum public_event_kind {
+  page_view
+  signup
+}
+
+Table public_feeds {
+  id              int [pk, increment]
+  kind            public_feed_kind [not null]
+  slug            varchar(64) [not null]
+  last_attempt_at datetime
+  last_success_at datetime
+  last_status     public_feed_status
+  last_error_code varchar(64)
+
+  indexes {
+    (kind, slug) [unique, name: 'uq_kind_slug']
+  }
+}
+
+Table public_repos {
+  id                int [pk, increment]
+  github_id         bigint [not null]
+  full_name         varchar(255) [not null]
+  owner             varchar(120) [not null]
+  name              varchar(160) [not null]
+  html_url          varchar(255)
+  description       text
+  language          varchar(50)
+  stars             int [not null, default: 0]
+  github_created_at datetime
+  first_seen_at     timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at        timestamp [not null, default: `CURRENT_TIMESTAMP`, note: 'ON UPDATE CURRENT_TIMESTAMP']
+
+  indexes {
+    github_id         [unique, name: 'uq_github']
+    (owner, name)     [name: 'idx_owner_name']
+    github_created_at [name: 'idx_created']
+  }
+}
+
+Table public_repo_snapshots {
+  id          int [pk, increment]
+  repo_id     int [not null]
+  stars       int [not null]
+  forks       int
+  open_issues int
+  watchers    int
+  captured_at timestamp [not null, default: `CURRENT_TIMESTAMP`]
+
+  indexes {
+    (repo_id, captured_at, id) [name: 'idx_repo_time']
+  }
+}
+
+Table public_feed_repos {
+  feed_id      int [not null]
+  repo_id      int [not null]
+  last_seen_at datetime [not null]
+
+  indexes {
+    (feed_id, repo_id)      [pk]
+    (feed_id, last_seen_at) [name: 'idx_feed_seen']
+    repo_id                 [name: 'idx_repo']
+  }
+}
+
+Table public_daily_metrics {
+  day             date [not null]
+  event_kind      public_event_kind [not null]
+  path_template   varchar(32) [not null]
+  locale          char(2) [not null]
+  referrer_domain varchar(255) [not null, default: '']
+  is_bot          tinyint(1) [not null, default: 0]
+  event_count     "int unsigned" [not null, default: 0]
+
+  indexes {
+    (day, event_kind, path_template, locale, referrer_domain, is_bot) [pk]
+  }
+}
+
+// 공개 풀은 사용자 테이블과 관계없이 유지된다.
+Ref: public_repo_snapshots.repo_id > public_repos.id [delete: cascade]
+Ref: public_feed_repos.feed_id > public_feeds.id [delete: cascade]
+Ref: public_feed_repos.repo_id > public_repos.id [delete: cascade]

@@ -2,6 +2,7 @@ import 'dotenv/config';
 import cron from 'node-cron';
 import app from './app.js';
 import { runPipelineAllUsers } from './etl/pipeline.js';
+import { runPublicCollection } from './etl/public-pipeline.js';
 import { initDb } from './db/init.js';
 
 const PORT = process.env.PORT || 4000;
@@ -15,6 +16,9 @@ async function start() {
       process.exit(1);
     }
     console.warn(`환경변수 경고 — 누락: ${missing.join(', ')} (dev에서는 계속 진행)`);
+  }
+  if (!process.env.PUBLIC_GITHUB_TOKEN) {
+    console.warn('[public-etl] PUBLIC_GITHUB_TOKEN 미설정 — 공개 수집 건너뜀');
   }
 
   const usingUrl = Boolean(process.env.MYSQL_URL || process.env.DATABASE_URL);
@@ -40,4 +44,7 @@ cron.schedule(schedule, () => {
   runPipelineAllUsers()
     .then((r) => console.log('[cron] ETL done', r))
     .catch((e) => console.error('[cron] ETL failed', e));
+  runPublicCollection()
+    .then((r) => console.log('[cron] public ETL done', r))
+    .catch((e) => console.error('[cron] public ETL failed', e.status ?? e.code ?? e.message));
 });
