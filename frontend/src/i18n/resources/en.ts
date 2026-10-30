@@ -147,6 +147,7 @@ export const en = {
       subtitle: '15 days · 100+ stars/day · 10%+ growth or 500+ stars',
       empty: 'No new projects matched the fast-growth rules in the last 24 hours',
       detail: 'Last 24 hours {{delta}} · {{rate}} growth',
+      detailSpan: 'Measured over {{hours}} hours {{delta}} · {{rate}} growth (shown as a daily rate)',
       estimated: 'est.',
       estimatedHint: 'No 24-hour-old record yet, so a shorter window was scaled to one day',
       accelerating: 'Faster than the previous day',

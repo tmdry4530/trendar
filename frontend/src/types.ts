@@ -119,6 +119,8 @@ export interface RisingRepo {
   rate_24h?: number;
   /** snapshot=실측 24시간, creation/partial=추정 */
   baseline_source?: 'snapshot' | 'creation' | 'partial';
+  /** 기준선~현재 실측 구간(시간). star_delta_24h는 이 구간의 실제 증가량 */
+  span_hours?: number;
   /** 이전 하루 대비 가속도 (0.5~2). 이전 기준선이 없으면 null */
   accel?: number | null;
   score?: number;
