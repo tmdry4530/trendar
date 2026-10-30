@@ -6,7 +6,8 @@ const DEFAULT_MAX_MANUAL_ETL_PER_DAY = 10;
 const DEFAULT_TREND_WINDOW_DAYS = 90;
 const DEFAULT_TREND_MIN_STARS = 50;
 const DEFAULT_RISING_WINDOW_DAYS = 15;
-const DEFAULT_RISING_MIN_DELTA = 500;
+const DEFAULT_FRESH_WINDOW_DAYS = 7;
+const DEFAULT_FRESH_MIN_STARS = 20;
 const DEFAULT_RISING_MIN_RATE = 100;
 const DEFAULT_RISING_MIN_GROWTH = 0.10;
 const DEFAULT_RISING_ABS_PASS = 500;
@@ -52,15 +53,23 @@ export function trendMinStars() {
   return parsed;
 }
 
-export function risingWindowDays() {
-  const parsed = Number(process.env.RISING_WINDOW_DAYS);
-  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_RISING_WINDOW_DAYS;
+// 초신생(fresh) 슬라이스 — created:>N일. 90일 trend 슬라이스는 스타순 상위 100개라
+// 커트라인이 수천 스타까지 올라가므로, 갓 생긴 레포를 일찍 잡기 위해 좁은 창을 따로 검색한다.
+export function freshWindowDays() {
+  const parsed = Number(process.env.ETL_FRESH_WINDOW_DAYS);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_FRESH_WINDOW_DAYS;
   return parsed;
 }
 
-export function risingMinDelta() {
-  const parsed = Number(process.env.RISING_MIN_DELTA);
-  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_RISING_MIN_DELTA;
+export function freshMinStars() {
+  const parsed = Number(process.env.ETL_FRESH_MIN_STARS);
+  if (!Number.isInteger(parsed) || parsed < 0) return DEFAULT_FRESH_MIN_STARS;
+  return parsed;
+}
+
+export function risingWindowDays() {
+  const parsed = Number(process.env.RISING_WINDOW_DAYS);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_RISING_WINDOW_DAYS;
   return parsed;
 }
 

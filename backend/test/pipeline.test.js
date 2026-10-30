@@ -1,7 +1,7 @@
 // test/pipeline.test.js — ETL 파이프라인(createEtlRunner) 검증(스텁 주입, DB·네트워크 불필요)
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { createEtlRunner } from '../src/etl/pipeline.js';
+import { createEtlRunner, buildSlices } from '../src/etl/pipeline.js';
 import { normalizeRepo, computeDelta } from '../src/etl/transform.js';
 
 function makeUsers({ byId = {}, all = [] } = {}) {
@@ -173,10 +173,10 @@ test('비401 쿼리 오류: errors에 기록되고 나머지 쿼리는 계속, s
 
   const result = await runner.runPipelineForUser(5);
 
-  // 조건당 두 수집 경로가 모두 실패하므로 사용자용 오류도 두 건 기록된다.
-  assert.equal(result.errors.length, 2, '한 조건이 두 슬라이스 모두에서 실패하면 슬라이스별로 격리 기록');
+  // 조건당 세 수집 경로(base·trend·fresh)가 모두 실패하므로 사용자용 오류도 세 건 기록된다.
+  assert.equal(result.errors.length, 3, '한 조건이 모든 슬라이스에서 실패하면 슬라이스별로 격리 기록');
   assert.equal(result.errors[0], '수집 조건을 처리하지 못했습니다.');
-  assert.doesNotMatch(result.errors.join(' '), /query#|base|trend|boom|bad/);
+  assert.doesNotMatch(result.errors.join(' '), /query#|base|trend|fresh|boom|bad/);
   // 슬라이스 실패는 격리되고 조건 루프는 완료되므로, 실패한 조건도 processed로 집계된다 (요건 5).
   assert.equal(result.queries_processed, 2, '두 조건 모두 조건 루프 완료 → processed');
   assert.equal(result.repos_upserted, 1);
@@ -242,10 +242,10 @@ test('trend 슬라이스만 throw → base 결과 저장·errors 기록·다음 
     decryptToken: (enc) => enc,
     createOctokit: (token) => ({ token }),
     extractRepos: async (wq, octokit, opts) => {
-      const isTrend = Boolean(opts?.createdAfter);
+      const isTrend = opts?.slice === 'trend';
       if (wq.id === 10 && isTrend) throw new Error('trend boom'); // 조건10의 trend 슬라이스만 실패
-      if (wq.id === 10) return [rawItem(300)]; // 조건10 base
-      return [rawItem(301)]; // 조건11 base+trend (2번째는 dedup)
+      if (wq.id === 10) return [rawItem(300)]; // 조건10 base·fresh (fresh는 dedup)
+      return [rawItem(301)]; // 조건11 base+trend+fresh (2번째부터 dedup)
     },
     normalizeRepo,
     computeDelta,
@@ -279,8 +279,8 @@ test('슬라이스별 minStars: base 하한 미달·trend 하한 이상 레포�
       createOctokit: (token) => ({ token }),
       // base 슬라이스는 GitHub의 stars:>= 필터에 걸려 빈손, trend 슬라이스만 신생 레포를 반환한다.
       extractRepos: async (wq, octokit, opts) => {
-        const isTrend = Boolean(opts?.createdAfter);
-        if (!isTrend) return []; // base 하한(1000급) 미달 → 애초에 안 잡힘
+        const isTrend = opts?.slice === 'trend';
+        if (!isTrend) return []; // base 하한(1000급) 미달 → 애초에 안 잡힘 (fresh는 이 테스트 범위 밖)
         return [rawItem(400, 100), rawItem(401, 30)]; // 100=하한 이상(저장), 30=하한 미만(스킵)
       },
       normalizeRepo,
@@ -299,4 +299,101 @@ test('슬라이스별 minStars: base 하한 미달·trend 하한 이상 레포�
     if (prev === undefined) delete process.env.ETL_TREND_MIN_STARS;
     else process.env.ETL_TREND_MIN_STARS = prev;
   }
+});
+
+test('buildSlices: base·trend·fresh 3개 — fresh는 created:>7일·하한 20 (기본값)', () => {
+  const keys = ['ETL_TREND_WINDOW_DAYS', 'ETL_TREND_MIN_STARS', 'ETL_FRESH_WINDOW_DAYS', 'ETL_FRESH_MIN_STARS'];
+  const prev = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
+  try {
+    for (const k of keys) delete process.env[k];
+    const slices = buildSlices(new Date('2026-10-30T00:00:00Z'));
+    assert.deepEqual(slices.map((s) => s.label), ['base', 'trend', 'fresh']);
+    assert.equal(slices[1].createdAfter, '2026-08-01');
+    assert.equal(slices[1].minStars, 50);
+    assert.equal(slices[2].createdAfter, '2026-10-23');
+    assert.equal(slices[2].minStars, 20);
+  } finally {
+    for (const k of keys) {
+      if (prev[k] === undefined) delete process.env[k];
+      else process.env[k] = prev[k];
+    }
+  }
+});
+
+test('buildSlices: fresh 창이 trend 창 이상이면 fresh 슬라이스를 생략한다', () => {
+  const prevT = process.env.ETL_TREND_WINDOW_DAYS;
+  const prevF = process.env.ETL_FRESH_WINDOW_DAYS;
+  try {
+    process.env.ETL_TREND_WINDOW_DAYS = '7';
+    process.env.ETL_FRESH_WINDOW_DAYS = '7';
+    assert.deepEqual(buildSlices(new Date()).map((s) => s.label), ['base', 'trend']);
+  } finally {
+    if (prevT === undefined) delete process.env.ETL_TREND_WINDOW_DAYS; else process.env.ETL_TREND_WINDOW_DAYS = prevT;
+    if (prevF === undefined) delete process.env.ETL_FRESH_WINDOW_DAYS; else process.env.ETL_FRESH_WINDOW_DAYS = prevF;
+  }
+});
+
+test('fresh 슬라이스: trend 상위 100에 못 드는 갓 생긴 레포가 fresh로 적재된다', async () => {
+  const prev = process.env.ETL_FRESH_MIN_STARS;
+  delete process.env.ETL_FRESH_MIN_STARS;
+  try {
+    const users = makeUsers({ byId: { 14: validUser(14, 'octo') } });
+    const loaders = makeLoaders();
+    const seenOpts = [];
+    const runner = createEtlRunner({
+      users,
+      decryptToken: (enc) => enc,
+      createOctokit: (token) => ({ token }),
+      extractRepos: async (wq, octokit, opts) => {
+        seenOpts.push(opts);
+        if (opts?.slice !== 'fresh') return []; // base·trend는 스타순 커트라인에 밀려 빈손
+        return [rawItem(500, 120), rawItem(501, 10)]; // 120=하한 20 이상(저장), 10=미만(스킵)
+      },
+      normalizeRepo,
+      computeDelta,
+      loaders,
+      queryFn: async () => [{ id: 30, query: 'q', query_type: 'keyword' }],
+    });
+
+    const result = await runner.runPipelineForUser(14);
+
+    assert.deepEqual(seenOpts.map((o) => o.slice), ['base', 'trend', 'fresh']);
+    const fresh = seenOpts.find((o) => o.slice === 'fresh');
+    assert.equal(fresh.minStars, 20);
+    assert.match(fresh.createdAfter, /^\d{4}-\d{2}-\d{2}$/);
+    assert.equal(loaders.calls.upsertRepo.length, 1);
+    assert.equal(loaders.calls.upsertRepo[0].github_id, 500);
+    assert.equal(result.repos_skipped, 1);
+  } finally {
+    if (prev === undefined) delete process.env.ETL_FRESH_MIN_STARS;
+    else process.env.ETL_FRESH_MIN_STARS = prev;
+  }
+});
+
+test('Search 호출 전마다 pacer.pace()를 기다린다 — 실행당 pacer 1개, 조건×슬라이스 횟수', async () => {
+  const users = makeUsers({ byId: { 15: validUser(15, 'octo') } });
+  const loaders = makeLoaders();
+  let pacers = 0;
+  let paces = 0;
+  let searches = 0;
+  const runner = createEtlRunner({
+    users,
+    decryptToken: (enc) => enc,
+    createOctokit: (token) => ({ token }),
+    extractRepos: async () => { searches++; assert.equal(paces, searches, 'pace가 검색보다 먼저'); return []; },
+    normalizeRepo,
+    computeDelta,
+    loaders,
+    queryFn: async () => [
+      { id: 40, query: 'a', query_type: 'keyword' },
+      { id: 41, query: 'b', query_type: 'topic' },
+    ],
+    makePacer: () => { pacers++; return { pace: async () => { paces++; } }; },
+  });
+
+  await runner.runPipelineForUser(15);
+
+  assert.equal(pacers, 1);
+  assert.equal(searches, 2 * buildSlices().length);
+  assert.equal(paces, searches);
 });
