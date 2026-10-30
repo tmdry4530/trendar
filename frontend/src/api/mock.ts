@@ -547,14 +547,17 @@ function risingRepos(query?: Record<string, unknown>): RisingRepo[] {
         velocity: Math.round((r.stars / ageDays) * 10) / 10,
         rate_24h: starDelta24h,
         baseline_source: 'snapshot',
+        span_hours: 24,
         accel: null,
         age_days: ageDays,
         score: starDelta24h / Math.sqrt(ageDays + 1),
+        rank: 0,
       };
     })
     .filter((x): x is RisingRepo => x !== null)
-    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-    .slice(0, limit);
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((row, index) => ({ ...row, rank: index + 1 }));
 }
 function bookmarks(query?: Record<string, unknown>): BookmarkRepo[] {
   const limit = query?.limit != null ? Number(query.limit) : 8;

@@ -1,3 +1,11 @@
+// @ts-check
+
+/**
+ * @typedef {{ id?: number | string, stars: number | string, captured_at: string | Date }} Snapshot
+ * @typedef {{ windowDays: number, freshHours: number, minRate: number, minGrowth: number, absPass: number, limit: number }} RisingConfig
+ * @typedef {import('../../../shared/api-types.js').BaselineSource} BaselineSource
+ */
+
 const HOUR_MS = 3_600_000;
 const DAY_MS = 24 * HOUR_MS;
 
@@ -37,6 +45,11 @@ function closestBaseline(snapshots, current) {
   return best;
 }
 
+/**
+ * @param {Snapshot[]} snapshots
+ * @param {{ createdAt?: string | Date | null, earliest?: Snapshot | null }} [opts]
+ * @returns {{ cur: Snapshot, base: Snapshot, source: BaselineSource, prev: Snapshot | null } | null}
+ */
 export function selectBaseline(snapshots, { createdAt, earliest } = {}) {
   if (!snapshots.length) return null;
   let cur = snapshots[0];
@@ -47,8 +60,8 @@ export function selectBaseline(snapshots, { createdAt, earliest } = {}) {
   }
   const base = closestBaseline(snapshots, cur);
   if (base) return { cur, base, source: 'snapshot', prev: closestBaseline(snapshots, base) };
-  const createdTime = new Date(createdAt).getTime();
-  if (time(cur) - createdTime <= 36 * HOUR_MS) {
+  // createdAt이 없으면(Invalid Date와 같은 의미) creation 기준선을 쓰지 않는다.
+  if (createdAt && time(cur) - new Date(createdAt).getTime() <= 36 * HOUR_MS) {
     return { cur, base: { stars: 0, captured_at: createdAt }, source: 'creation', prev: null };
   }
   const partial = earliest ?? first;
@@ -94,7 +107,8 @@ export function scoreCandidate(candidate, cfg = DEFAULT_RISING_CONFIG, now = new
   if (new Date(candidate.github_created_at).getTime() < new Date(now).getTime() - config.windowDays * DAY_MS) return null;
   const measure = measureCandidate(candidate, config, now);
   if (!measure || measure.rate_24h < config.minRate) return null;
-  if (!(measure.growth_rate_24h >= config.minGrowth || measure.rate_24h >= config.absPass || measure.baseline_source === 'creation')) return null;
+  // growth_rate_24h가 null(creation 기준선)이면 증가율 조건은 불통과 — creation 분기가 따로 통과시킨다.
+  if (!((measure.growth_rate_24h ?? -Infinity) >= config.minGrowth || measure.rate_24h >= config.absPass || measure.baseline_source === 'creation')) return null;
   const { id, github_id, full_name, owner, name, html_url, description, language, github_created_at } = candidate;
   return {
     id, github_id, full_name, owner, name, html_url, description, language, github_created_at,

@@ -103,30 +103,8 @@ export interface TrendRepo {
   language: string | null;
 }
 
-/** GET /api/rising 항목 (신생 급상승) */
-export interface RisingRepo {
-  id: number;
-  full_name: string;
-  language: string | null;
-  stars: number;
-  star_delta: number;
-  star_delta_24h: number;
-  /** 기준선 스타가 0(생성 기준선)이면 null */
-  growth_rate_24h: number | null;
-  github_created_at: string;
-  velocity: number;
-  /** 하루 환산 증가 (rising-score-v3) */
-  rate_24h?: number;
-  /** snapshot=실측 24시간, creation/partial=추정 */
-  baseline_source?: 'snapshot' | 'creation' | 'partial';
-  /** 기준선~현재 실측 구간(시간). star_delta_24h는 이 구간의 실제 증가량 */
-  span_hours?: number;
-  /** 이전 하루 대비 가속도 (0.5~2). 이전 기준선이 없으면 null */
-  accel?: number | null;
-  score?: number;
-  rank?: number;
-  age_days?: number;
-}
+/** GET /api/rising 항목 (신생 급상승) — 백엔드와 공유하는 계약 타입(shared/api-types.ts) */
+export type { RisingRepo, BaselineSource } from '../../shared/api-types';
 
 /** GET /api/bookmarks 항목 (관심 레포) */
 export interface BookmarkRepo {

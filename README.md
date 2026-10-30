@@ -146,6 +146,7 @@ cp .env.example .env               # DB 접속정보 + GitHub OAuth + TOKEN_ENCR
 npm install
 npm run dev                        # http://localhost:4000
 npm test                           # 단위 테스트
+npm run typecheck                  # 타입 검사 (아래 'TypeScript 전환' 참고)
 
 # 3) 프론트엔드
 cd frontend
@@ -154,6 +155,15 @@ npm run dev                        # http://localhost:5173 (/api 와 공개 경�
 ```
 
 > 백엔드 없이 UI만 보려면 `frontend/.env.local` 에 `VITE_USE_MOCK=true` 를 두면 인메모리 목 데이터로 동작한다.
+
+### TypeScript 전환 (진행 중)
+
+백엔드는 런타임을 바꾸지 않고 파일 단위로 점진 전환한다.
+
+1. **(완료) 타입 검사 켜기** — `backend/tsconfig.json`은 `allowJs` + `checkJs: false`라, 맨 위에 `// @ts-check`가 있는 JS 파일만 검사한다. 빌드 산출물은 없다. 현재 대상: `services/rising-score.js`, `services/rising-response.js`, `utils/limits.js`.
+2. **(완료) API 계약 타입 공유** — `shared/api-types.ts`를 프론트(`import type`)와 백엔드(JSDoc `import(...)`)가 함께 쓴다. 현재 `RisingRepo`(/api/rising). 응답 형태를 바꾸면 양쪽 `typecheck`가 동시에 잡는다.
+3. **(다음)** `// @ts-check` 대상을 utils → services → models → controllers 순으로 넓히고, 나머지 API 타입(`frontend/src/types.ts`)을 `shared/`로 옮긴다. models는 mysql2 `pool.query` 결과 타입(`QueryResult`) 캐스팅 헬퍼부터 만든다.
+4. **(그 다음)** 파일을 `.ts`로 바꾼다. Node 22의 타입 제거 실행을 쓰면 빌드 단계 없이 유지할 수 있다(enum 등 비지원 문법은 `erasableSyntaxOnly`로 막는다). 테스트는 마지막.
 
 ### GitHub OAuth App 설정
 
@@ -297,6 +307,7 @@ docker stop trendar-public-smoke
 ```
 trendar/
 ├── db/          # schema.sql (MySQL) · schema.dbml (dbdiagram.io)
+├── shared/      # api-types.ts — 백엔드·프론트 공용 API 계약 타입 (타입 전용)
 ├── backend/     # Express REST API · GitHub OAuth · ETL 파이프라인 · 공개 트렌드 SSR · node:test
 │   ├── src/     # routes · controllers · models · middleware · services · etl · utils · views(공개 HTML) · config/public-feeds.js
 │   ├── scripts/ # public-smoke.mjs (npm run smoke:public)
