@@ -1,4 +1,5 @@
 import { pool } from '../config/db.js';
+import { rankRising } from '../services/rising-score.js';
 
 function toRepo(r) {
   return {
@@ -91,43 +92,106 @@ export async function trends(userId, limit = 10) {
   return rows.map((r) => ({ ...r, stars: Number(r.stars), star_delta: Number(r.star_delta), growth_rate: Number(r.growth_rate) }));
 }
 
-export function buildRisingQuery(userId, { windowDays, minDelta, limit }) {
+// ── 신생 급상승 (rising-score-v3) ──
+// 공개 피드와 같은 순수 함수(rankRising)를 사용자 레포에 적용한다. 후보는 생성 windowDays일 이내 레포,
+// 스냅샷은 최근 recentDays일치(기준선 cur−24h와 가속도용 이전 기준선까지 최대 72h 필요) + 가장 이른 스냅샷.
+export function buildRisingCandidatesQuery(userId, windowDays) {
   return {
-    sql: `SELECT r.id, r.full_name, r.language, r.stars, r.star_delta, r.github_created_at,
-                 r.stars / GREATEST(DATEDIFF(NOW(), r.github_created_at), 1) AS velocity,
-                 r.stars - baseline.stars AS star_delta_24h,
-                 (r.stars - baseline.stars) / GREATEST(baseline.stars, 1) AS growth_rate_24h
-          FROM repos r
-          JOIN repo_snapshots baseline ON baseline.id = (
-            SELECT s.id
-            FROM repo_snapshots s
-            WHERE s.repo_id = r.id
-              AND s.captured_at <= DATE_SUB(NOW(), INTERVAL 24 HOUR)
-            ORDER BY s.captured_at DESC, s.id DESC
-            LIMIT 1
-          )
-          WHERE r.user_id = ?
-            AND r.github_created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
-            AND r.stars - baseline.stars >= ?
-          ORDER BY star_delta_24h DESC, growth_rate_24h DESC
-          LIMIT ?`,
-    params: [Number(userId), Number(windowDays), Number(minDelta), Number(limit)],
+    sql: `SELECT id, github_id, full_name, owner, name, html_url, description, language, stars, star_delta, github_created_at
+          FROM repos
+          WHERE user_id = ?
+            AND github_created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+    params: [Number(userId), Number(windowDays)],
   };
 }
 
-// 신생 레포를 동일한 24시간 기준 증가량으로 비교한다. 기준선이 없는 레포는 JOIN에서 제외된다.
-export async function risingRepos(userId, windowDays, limit = 8, minDelta = 500) {
-  const { sql, params } = buildRisingQuery(userId, { windowDays, minDelta, limit });
-  const [rows] = await pool.query(sql, params);
-  return rows.map((r) => ({
-    ...r,
-    stars: Number(r.stars),
-    star_delta: Number(r.star_delta),
-    velocity: Number(r.velocity),
-    star_delta_24h: Number(r.star_delta_24h),
-    growth_rate_24h: Number(r.growth_rate_24h),
-    github_created_at: r.github_created_at ? new Date(r.github_created_at).toISOString() : null,
-  }));
+export function buildRisingSnapshotsQuery(repoIds, recentDays) {
+  return {
+    sql: `SELECT repo_id, id, stars, captured_at FROM repo_snapshots
+          WHERE repo_id IN (${repoIds.map(() => '?').join(', ') || 'NULL'})
+            AND captured_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+          ORDER BY repo_id ASC, captured_at ASC, id ASC`,
+    params: [...repoIds.map(Number), Number(recentDays)],
+  };
+}
+
+export function buildRisingEarliestQuery(repoIds) {
+  return {
+    sql: `SELECT s.repo_id, s.id, s.stars, s.captured_at FROM repos r
+          JOIN repo_snapshots s ON s.id = (
+            SELECT first.id FROM repo_snapshots first
+            WHERE first.repo_id = r.id ORDER BY first.captured_at ASC, first.id ASC LIMIT 1
+          )
+          WHERE r.id IN (${repoIds.map(() => '?').join(', ') || 'NULL'})`,
+    params: repoIds.map(Number),
+  };
+}
+
+// rankRising 입력 계약(snapshots 배열 + earliest)으로 후보를 조립한다.
+export function assembleRisingCandidates(repos, snapshots, earliest) {
+  const candidates = repos.map((repo) => ({ ...repo, snapshots: [], earliest: null }));
+  const byId = new Map(candidates.map((candidate) => [candidate.id, candidate]));
+  for (const { repo_id, id, stars, captured_at } of snapshots) {
+    byId.get(repo_id)?.snapshots.push({ id, stars, captured_at });
+  }
+  for (const { repo_id, id, stars, captured_at } of earliest) {
+    const candidate = byId.get(repo_id);
+    if (candidate) candidate.earliest = { id, stars, captured_at };
+  }
+  return candidates;
+}
+
+export async function risingCandidates(userId, { windowDays, recentDays = 4 }) {
+  const base = buildRisingCandidatesQuery(userId, windowDays);
+  const [repos] = await pool.query(base.sql, base.params);
+  if (!repos.length) return [];
+  const repoIds = repos.map(({ id }) => id);
+  const range = buildRisingSnapshotsQuery(repoIds, recentDays);
+  const [snapshots] = await pool.query(range.sql, range.params);
+  const first = buildRisingEarliestQuery(repoIds);
+  const [earliest] = await pool.query(first.sql, first.params);
+  return assembleRisingCandidates(repos, snapshots, earliest);
+}
+
+const DAY_MS = 86_400_000;
+
+// /api/rising 응답 행. 기존 필드(star_delta_24h·growth_rate_24h·velocity 등)는 유지하고
+// v3 지표(rate_24h·baseline_source·accel·score·rank·age_days)를 덧붙인다.
+export function rankUserRising(candidates, config, now = new Date()) {
+  const starDeltaById = new Map(candidates.map((c) => [c.id, Number(c.star_delta ?? 0)]));
+  return rankRising(candidates, config, now).map((row) => {
+    const createdAt = row.github_created_at ? new Date(row.github_created_at) : null;
+    const ageDaysNow = createdAt ? (new Date(now).getTime() - createdAt.getTime()) / DAY_MS : null;
+    return {
+      id: row.id,
+      github_id: row.github_id,
+      full_name: row.full_name,
+      owner: row.owner,
+      name: row.name,
+      html_url: row.html_url,
+      description: row.description,
+      language: row.language,
+      stars: row.stars,
+      star_delta: starDeltaById.get(row.id) ?? 0,
+      github_created_at: createdAt ? createdAt.toISOString() : null,
+      velocity: ageDaysNow == null ? 0 : row.stars / Math.max(ageDaysNow, 1),
+      star_delta_24h: row.star_delta_24h,
+      growth_rate_24h: row.growth_rate_24h,
+      rate_24h: row.rate_24h,
+      baseline_source: row.baseline_source,
+      span_hours: row.span_hours,
+      accel: row.accel,
+      age_days: row.age_days,
+      score: row.score,
+      rank: row.rank,
+      captured_at: row.captured_at ? new Date(row.captured_at).toISOString() : null,
+    };
+  });
+}
+
+export async function risingRepos(userId, { config, now = new Date() }) {
+  const candidates = await risingCandidates(userId, { windowDays: config.windowDays });
+  return rankUserRising(candidates, config, now);
 }
 
 // 관심 레포(북마크) — 대시보드 노출용. 최근 증가 순 (trend-ranking-v2 R4).

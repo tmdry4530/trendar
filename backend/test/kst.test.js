@@ -6,7 +6,8 @@ import {
   trendWindowDays,
   trendMinStars,
   risingWindowDays,
-  risingMinDelta,
+  freshWindowDays,
+  freshMinStars,
 } from '../src/utils/limits.js';
 
 // KST 자정 = UTC 15:00. 경계 전후로 날짜가 정확히 넘어가야 한다.
@@ -120,19 +121,36 @@ test('risingWindowDays — 기본 15, env 양의 정수면 반영, 비정상 값
   }
 });
 
-test('risingMinDelta — 기본 500, env 양의 정수면 반영, 비정상 값은 기본값', () => {
-  const orig = process.env.RISING_MIN_DELTA;
+test('freshWindowDays — 기본 7, env 양의 정수면 반영, 비정상 값은 기본값', () => {
+  const orig = process.env.ETL_FRESH_WINDOW_DAYS;
   try {
-    delete process.env.RISING_MIN_DELTA;
-    assert.equal(risingMinDelta(), 500);
-    process.env.RISING_MIN_DELTA = '800';
-    assert.equal(risingMinDelta(), 800);
-    process.env.RISING_MIN_DELTA = '0';
-    assert.equal(risingMinDelta(), 500);
-    process.env.RISING_MIN_DELTA = 'abc';
-    assert.equal(risingMinDelta(), 500);
+    delete process.env.ETL_FRESH_WINDOW_DAYS;
+    assert.equal(freshWindowDays(), 7);
+    process.env.ETL_FRESH_WINDOW_DAYS = '3';
+    assert.equal(freshWindowDays(), 3);
+    process.env.ETL_FRESH_WINDOW_DAYS = '0';
+    assert.equal(freshWindowDays(), 7);
+    process.env.ETL_FRESH_WINDOW_DAYS = 'abc';
+    assert.equal(freshWindowDays(), 7);
   } finally {
-    if (orig === undefined) delete process.env.RISING_MIN_DELTA;
-    else process.env.RISING_MIN_DELTA = orig;
+    if (orig === undefined) delete process.env.ETL_FRESH_WINDOW_DAYS;
+    else process.env.ETL_FRESH_WINDOW_DAYS = orig;
+  }
+});
+
+test('freshMinStars — 기본 20, env 0 이상 정수면 반영(0 포함), 비정상 값은 기본값', () => {
+  const orig = process.env.ETL_FRESH_MIN_STARS;
+  try {
+    delete process.env.ETL_FRESH_MIN_STARS;
+    assert.equal(freshMinStars(), 20);
+    process.env.ETL_FRESH_MIN_STARS = '5';
+    assert.equal(freshMinStars(), 5);
+    process.env.ETL_FRESH_MIN_STARS = '0';
+    assert.equal(freshMinStars(), 0);
+    process.env.ETL_FRESH_MIN_STARS = '-1';
+    assert.equal(freshMinStars(), 20);
+  } finally {
+    if (orig === undefined) delete process.env.ETL_FRESH_MIN_STARS;
+    else process.env.ETL_FRESH_MIN_STARS = orig;
   }
 });

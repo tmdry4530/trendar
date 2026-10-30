@@ -144,9 +144,13 @@ export const en = {
     },
     rising: {
       title: 'New and rising',
-      subtitle: '15 days · 500+ stars gained in 24 hours',
+      subtitle: '15 days · 100+ stars/day · 10%+ growth or 500+ stars',
       empty: 'No new projects matched the fast-growth rules in the last 24 hours',
       detail: 'Last 24 hours {{delta}} · {{rate}} growth',
+      estimated: 'est.',
+      estimatedHint: 'No 24-hour-old record yet, so a shorter window was scaled to one day',
+      accelerating: 'Faster than the previous day',
+      slowing: 'Slower than the previous day',
     },
     movers: {
       title: 'Growing quickly',

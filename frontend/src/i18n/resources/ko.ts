@@ -141,9 +141,13 @@ export const ko = {
     },
     rising: {
       title: '신생 급상승',
-      subtitle: '최근 15일 안에 공개 · 최근 24시간 스타 500개 이상 증가',
+      subtitle: '최근 15일 안에 공개 · 하루 스타 100개 이상 증가 · 증가율 10% 이상 또는 500개 이상',
       empty: '최근 24시간 동안 빠르게 성장한 신생 프로젝트가 없습니다',
       detail: '최근 24시간 {{delta}} · 증가율 {{rate}}',
+      estimated: '추정',
+      estimatedHint: '24시간 전 비교 기록이 없어 짧은 구간을 하루 기준으로 환산한 값입니다',
+      accelerating: '어제보다 빨라지는 중',
+      slowing: '어제보다 느려지는 중',
     },
     movers: {
       title: '빠르게 성장 중',

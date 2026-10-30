@@ -1,4 +1,4 @@
-// RisingTable.tsx — 신생 급상승 레포 (최근 24시간 증가 순, 최근 생성 레포)
+// RisingTable.tsx — 신생 급상승 레포 (rising-score-v3 점수 순, 최근 생성 레포)
 import { useNavigate } from 'react-router-dom';
 import type { RisingRepo } from '../types';
 import { formatStars, formatDelta, formatPercent, formatRelativeTime } from '../lib/format';
@@ -6,6 +6,10 @@ import { LoadingState, ErrorState } from './States';
 import styles from './RisingTable.module.css';
 import { useTranslation } from 'react-i18next';
 import { toSupportedLocale } from '../i18n';
+
+// 이전 하루 대비 가속도 표시 임계값
+const ACCEL_UP = 1.2;
+const ACCEL_DOWN = 0.8;
 
 interface RisingTableProps {
   data: RisingRepo[] | null;
@@ -42,6 +46,14 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
             repo.star_delta_24h > 0 ? 'delta delta--up'
             : repo.star_delta_24h < 0 ? 'delta delta--down'
             : 'delta delta--flat';
+          const estimated = repo.baseline_source != null && repo.baseline_source !== 'snapshot';
+          // 추정 기준선은 실제 구간이 24시간이 아니므로 하루 환산값(rate_24h)을 보여 준다.
+          const shownDelta = estimated && repo.rate_24h != null ? Math.round(repo.rate_24h) : repo.star_delta_24h;
+          const trend =
+            repo.accel == null ? null
+            : repo.accel >= ACCEL_UP ? 'up'
+            : repo.accel <= ACCEL_DOWN ? 'down'
+            : null;
           return (
             <tr
               key={repo.id}
@@ -65,7 +77,21 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
                 <span className="stars">★ {formatStars(repo.stars, locale)}</span>
               </td>
               <td className="col-num">
-                <span className={deltaClass}>{formatDelta(repo.star_delta_24h, locale)}</span>
+                {trend && (
+                  <span
+                    className={trend === 'up' ? styles.accelUp : styles.accelDown}
+                    title={t(trend === 'up' ? 'dashboard.rising.accelerating' : 'dashboard.rising.slowing')}
+                    aria-label={t(trend === 'up' ? 'dashboard.rising.accelerating' : 'dashboard.rising.slowing')}
+                  >
+                    {trend === 'up' ? '↑' : '↓'}
+                  </span>
+                )}
+                <span className={deltaClass}>{formatDelta(shownDelta, locale)}</span>
+                {estimated && (
+                  <span className={styles.est} title={t('dashboard.rising.estimatedHint')}>
+                    {t('dashboard.rising.estimated')}
+                  </span>
+                )}
               </td>
               <td className="col-num">
                 <span className={styles.age}>{formatRelativeTime(repo.github_created_at, locale)}</span>

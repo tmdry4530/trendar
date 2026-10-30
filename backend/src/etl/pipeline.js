@@ -8,7 +8,8 @@ import { httpError } from '../middleware/errorHandler.js';
 import { extractRepos } from './extract.js';
 import { normalizeRepo, computeDelta } from './transform.js';
 import { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot } from './load.js';
-import { trendWindowDays, trendMinStars } from '../utils/limits.js';
+import { trendWindowDays, trendMinStars, freshWindowDays, freshMinStars, searchIntervalMs } from '../utils/limits.js';
+import { createPacer } from './public-extract.js';
 
 const MIN_STARS = Number(process.env.ETL_MIN_STARS) || 0;
 const TOKEN_INVALID_MESSAGE = 'GitHub 연결이 유효하지 않습니다. 다시 로그인해 주세요.';
@@ -19,6 +20,28 @@ function preflightError(status, code, message) {
   const e = httpError(status, code, message);
   e.refundable = true;
   return e;
+}
+
+function daysAgo(now, days) {
+  return new Date(now.getTime() - days * 86400000).toISOString().slice(0, 10);
+}
+
+// 조건마다 검색할 슬라이스 목록. 나이는 실행 시점 기준이면 충분하므로 실행당 1회만 계산해 재사용한다.
+// base=스타순 베이스라인, trend=신생(created:>90일) 슬라이스, fresh=초신생(created:>7일) 슬라이스.
+// trend는 스타순 상위 100개만 가져오므로 인기 키워드에서는 커트라인이 수천 스타까지 올라간다.
+// fresh는 그 커트라인에 가려진 갓 생긴 레포를 수십~수백 스타 단계에서 잡는다.
+// fresh 창이 trend 창 이상이면 검색 결과가 trend와 겹치므로 생략한다.
+export function buildSlices(now = new Date()) {
+  const trendDays = trendWindowDays();
+  const freshDays = freshWindowDays();
+  const slices = [
+    { label: 'base', minStars: MIN_STARS },
+    { label: 'trend', minStars: trendMinStars(), createdAfter: daysAgo(now, trendDays) },
+  ];
+  if (freshDays < trendDays) {
+    slices.push({ label: 'fresh', minStars: freshMinStars(), createdAfter: daysAgo(now, freshDays) });
+  }
+  return slices;
 }
 
 async function defaultQueryFn(userId, queryId) {
@@ -38,6 +61,8 @@ export function createEtlRunner(deps) {
     computeDelta,
     loaders: { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot },
     queryFn,
+    // 토큰별 Search API 30회/분 한도 보호. 실행(사용자)마다 새 pacer를 만든다. 미주입 시 대기 없음(테스트).
+    makePacer = () => ({ pace: async () => {} }),
   } = deps;
 
   const running = new Set();
@@ -73,18 +98,19 @@ export function createEtlRunner(deps) {
 
       // 실행(run) 단위 dedup — 슬라이스·조건 간 같은 github_id는 1회만 적재해 스냅샷 오염을 막는다 (R3).
       const seen = new Set();
-      // 신생 슬라이스의 created:> 하한. 나이는 실행 시점 기준이면 충분하므로 실행당 1회만 계산해 재사용한다.
-      const createdAfter = new Date(Date.now() - trendWindowDays() * 86400000).toISOString().slice(0, 10);
+      // 슬라이스별 스타 하한·created:> 하한이 다르다 (R1). 실행당 1회만 계산한다.
+      const slices = buildSlices(new Date());
+      const pacer = makePacer();
 
       for (const wq of queries) {
-        // base=스타순 베이스라인, trend=신생(created:>) 슬라이스. 슬라이스별 스타 하한이 다르다 (R1).
-        const slices = [
-          { label: 'base', minStars: MIN_STARS },
-          { label: 'trend', minStars: trendMinStars(), createdAfter },
-        ];
         for (const slice of slices) {
           try {
-            const raw = await extractRepos(wq, octokit, { minStars: slice.minStars, createdAfter: slice.createdAfter });
+            await pacer.pace();
+            const raw = await extractRepos(wq, octokit, {
+              minStars: slice.minStars,
+              createdAfter: slice.createdAfter,
+              slice: slice.label,
+            });
             for (const item of raw) {
               const repo = normalizeRepo(item, wq.id, userId);
               if (!repo.github_id) continue;
@@ -152,6 +178,7 @@ export const { runPipelineForUser, runPipelineAllUsers, isRunning } = createEtlR
   computeDelta,
   loaders: { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot },
   queryFn: defaultQueryFn,
+  makePacer: () => createPacer({ intervalMs: searchIntervalMs() }),
 });
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
