@@ -42,13 +42,15 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
       </thead>
       <tbody>
         {data.map((repo) => {
+          // 기준선 구간은 수집 타이밍에 따라 20~36시간(partial은 더 짧게)으로 달라지므로,
+          // 항상 하루 환산값(rate_24h)을 보여 준다. 구형 응답(rate_24h 없음)은 star_delta_24h 그대로.
+          const shownDelta = repo.rate_24h != null ? Math.round(repo.rate_24h) : repo.star_delta_24h;
+          const spanHours = repo.span_hours != null ? Math.round(repo.span_hours) : null;
           const deltaClass =
-            repo.star_delta_24h > 0 ? 'delta delta--up'
-            : repo.star_delta_24h < 0 ? 'delta delta--down'
+            shownDelta > 0 ? 'delta delta--up'
+            : shownDelta < 0 ? 'delta delta--down'
             : 'delta delta--flat';
           const estimated = repo.baseline_source != null && repo.baseline_source !== 'snapshot';
-          // 추정 기준선은 실제 구간이 24시간이 아니므로 하루 환산값(rate_24h)을 보여 준다.
-          const shownDelta = estimated && repo.rate_24h != null ? Math.round(repo.rate_24h) : repo.star_delta_24h;
           const trend =
             repo.accel == null ? null
             : repo.accel >= ACCEL_UP ? 'up'
@@ -58,10 +60,16 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
             <tr
               key={repo.id}
               onClick={() => navigate(`/repos/${repo.id}`)}
-              title={t('dashboard.rising.detail', {
-                delta: formatDelta(repo.star_delta_24h, locale),
-                rate: formatPercent(repo.growth_rate_24h, 1, locale),
-              })}
+              title={spanHours != null && spanHours !== 24
+                ? t('dashboard.rising.detailSpan', {
+                    hours: spanHours,
+                    delta: formatDelta(repo.star_delta_24h, locale),
+                    rate: formatPercent(repo.growth_rate_24h, 1, locale),
+                  })
+                : t('dashboard.rising.detail', {
+                    delta: formatDelta(repo.star_delta_24h, locale),
+                    rate: formatPercent(repo.growth_rate_24h, 1, locale),
+                  })}
             >
               <td>
                 <div className={`${styles.repoCell} truncate`} title={repo.full_name}>{repo.full_name}</div>
