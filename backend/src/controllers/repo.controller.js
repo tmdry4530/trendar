@@ -1,6 +1,7 @@
 import * as Repo from '../models/repo.model.js';
 import { httpError } from '../middleware/errorHandler.js';
-import { risingMinDelta, risingWindowDays } from '../utils/limits.js';
+import { publicRisingConfig } from '../utils/limits.js';
+import { normalizeLimit } from '../services/rising-score.js';
 
 export async function list(req, res, next) {
   try {
@@ -56,8 +57,10 @@ export async function trends(req, res, next) {
 
 export async function rising(req, res, next) {
   try {
-    const limit = req.query.limit ? Number(req.query.limit) : 8;
-    res.json({ ok: true, data: await Repo.risingRepos(req.user.id, risingWindowDays(), limit, risingMinDelta()) });
+    // 공개 피드와 같은 rising-score-v3 규칙 — 하루 환산 증가·증가율·보정 기준선·신선도·가속도
+    const limit = normalizeLimit(req.query.limit);
+    const config = { ...publicRisingConfig(), limit };
+    res.json({ ok: true, data: await Repo.risingRepos(req.user.id, { config }) });
   } catch (e) { next(e); }
 }
 

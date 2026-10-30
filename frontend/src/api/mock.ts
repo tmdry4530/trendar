@@ -516,7 +516,10 @@ const RISING_SAMPLE: { id: number; ageDays: number }[] = [
   { id: 9, ageDays: 42 }, // toolhouse-ai/agent-tools — 6주 전 생성
 ];
 const RISING_WINDOW_DAYS = 15;
-const RISING_MIN_DELTA = 500;
+// rising-score-v3 노출 규칙 근사: rate ≥ 100 그리고 (증가율 ≥ 10% 또는 rate ≥ 500), 점수 = rate / √(나이+1)
+const RISING_MIN_RATE = 100;
+const RISING_MIN_GROWTH = 0.1;
+const RISING_ABS_PASS = 500;
 function risingRepos(query?: Record<string, unknown>): RisingRepo[] {
   const limit = query?.limit != null ? Number(query.limit) : 8;
   return RISING_SAMPLE.filter(({ ageDays }) => ageDays <= RISING_WINDOW_DAYS)
@@ -529,7 +532,9 @@ function risingRepos(query?: Record<string, unknown>): RisingRepo[] {
         .at(-1);
       if (!baseline) return null;
       const starDelta24h = r.stars - baseline.stars;
-      if (starDelta24h < RISING_MIN_DELTA) return null;
+      const growth = starDelta24h / Math.max(baseline.stars, 1);
+      if (starDelta24h < RISING_MIN_RATE) return null;
+      if (!(growth >= RISING_MIN_GROWTH || starDelta24h >= RISING_ABS_PASS)) return null;
       return {
         id: r.id,
         full_name: r.full_name,
@@ -537,13 +542,18 @@ function risingRepos(query?: Record<string, unknown>): RisingRepo[] {
         stars: r.stars,
         star_delta: r.star_delta,
         star_delta_24h: starDelta24h,
-        growth_rate_24h: starDelta24h / Math.max(baseline.stars, 1),
+        growth_rate_24h: growth,
         github_created_at: new Date(Date.now() - ageDays * 24 * 60 * 60 * 1000).toISOString(),
         velocity: Math.round((r.stars / ageDays) * 10) / 10,
+        rate_24h: starDelta24h,
+        baseline_source: 'snapshot',
+        accel: null,
+        age_days: ageDays,
+        score: starDelta24h / Math.sqrt(ageDays + 1),
       };
     })
     .filter((x): x is RisingRepo => x !== null)
-    .sort((a, b) => b.star_delta_24h - a.star_delta_24h || b.growth_rate_24h - a.growth_rate_24h)
+    .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     .slice(0, limit);
 }
 function bookmarks(query?: Record<string, unknown>): BookmarkRepo[] {

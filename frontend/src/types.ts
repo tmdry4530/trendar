@@ -111,9 +111,19 @@ export interface RisingRepo {
   stars: number;
   star_delta: number;
   star_delta_24h: number;
-  growth_rate_24h: number;
+  /** 기준선 스타가 0(생성 기준선)이면 null */
+  growth_rate_24h: number | null;
   github_created_at: string;
   velocity: number;
+  /** 하루 환산 증가 (rising-score-v3) */
+  rate_24h?: number;
+  /** snapshot=실측 24시간, creation/partial=추정 */
+  baseline_source?: 'snapshot' | 'creation' | 'partial';
+  /** 이전 하루 대비 가속도 (0.5~2). 이전 기준선이 없으면 null */
+  accel?: number | null;
+  score?: number;
+  rank?: number;
+  age_days?: number;
 }
 
 /** GET /api/bookmarks 항목 (관심 레포) */

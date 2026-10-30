@@ -1,6 +1,6 @@
 ---
 feature: rising-24h-ranking
-status: approved
+status: superseded
 created: 2026-08-09
 related:
   - .claude/specs/trend-ranking-v2/requirements.md
@@ -8,6 +8,8 @@ related:
 ---
 
 # 신생 급상승 24시간 랭킹 (rising-24h-ranking) — 요구사항
+
+> **Superseded (2026-10-30):** 대시보드 신생 급상승은 공개 피드와 같은 `rising-score-v3` 규칙(`backend/src/services/rising-score.js`의 `rankRising`)으로 통일했다. `RISING_MIN_DELTA` 하드컷과 `buildRisingQuery`는 제거됐다. 현재 규칙은 README의 '랭킹' 절을 따른다.
 
 ## 1. Overview
 
