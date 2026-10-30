@@ -1,0 +1,19 @@
+{
+  // 백엔드 타입 검사 (TS 전환 1단계). 런타임은 그대로 `node src/*.js`이고 빌드 산출물은 없다.
+  // - allowJs + checkJs:false → 파일 맨 위에 `// @ts-check`가 있는 JS만 검사한다. 파일 단위로 점진 확대.
+  // - ../shared/api-types.ts → 프론트와 같은 API 계약 타입을 JSDoc으로 참조한다.
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "strict": true,
+    "noImplicitAny": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "types": ["node"]
+  },
+  "include": ["src/**/*.js", "../shared/**/*.ts"]
+}

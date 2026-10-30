@@ -1,3 +1,4 @@
+// @ts-check
 // utils/limits.js — 사용자당 watch query 상한
 import { httpError } from '../middleware/errorHandler.js';
 
