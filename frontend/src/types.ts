@@ -164,6 +164,42 @@ export interface Me {
   user: AuthUser;
   tokenInvalid: boolean;
   plan: Plan;
+  /** 서버가 판정한 관리자 여부. 메뉴 노출용이며 인가 근거가 아니다. 미지정=false. */
+  isAdmin?: boolean;
+}
+
+/** GET /api/admin/overview */
+export interface AdminOverview {
+  users: { total: number; free: number; pro: number; etl_failed: number; token_invalid: number };
+  subscriptions: { status: string; count: number }[];
+  public_repos: number;
+  generated_at: string;
+}
+
+export type AdminEtlStatus = 'ok' | 'error' | 'token_invalid';
+
+/** GET /api/admin/users 항목 */
+export interface AdminUser {
+  id: number;
+  login: string;
+  name: string | null;
+  created_at: string;
+  plan: Plan;
+  subscription_status: string | null;
+  current_period_end: string | null;
+  query_count: number;
+  repo_count: number;
+  last_etl_at: string | null;
+  last_etl_status: AdminEtlStatus | null;
+  token_invalid: boolean;
+}
+
+/** GET /api/admin/users 응답 */
+export interface AdminUsersResult {
+  items: AdminUser[];
+  total: number;
+  page: number;
+  page_size: number;
 }
 
 export interface PlanLimits {
@@ -210,4 +246,19 @@ export interface CheckoutResult {
 /** POST /api/billing/portal 응답 */
 export interface PortalResult {
   portal_url: string;
+}
+
+export interface AdminFeed {
+  kind: 'all' | 'language' | 'topic';
+  slug: string;
+  name: { ko: string; en: string };
+  last_attempt_at: string | null;
+  last_success_at: string | null;
+  last_status: 'ok' | 'error' | null;
+  last_error_code: string | null;
+  repo_count: number;
+}
+
+export interface AdminFeedsResult {
+  items: AdminFeed[];
 }

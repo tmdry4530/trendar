@@ -168,7 +168,7 @@ test('deleteAccount: users.deleteById(req.user.id) 호출 + sid 삭제', async (
   assert.deepEqual(res.body, { ok: true, data: null });
 });
 
-test('me: { user: { login, name, avatarUrl }, tokenInvalid, plan } 형태로 응답', async () => {
+test('me: 기존 user·tokenInvalid·plan과 additive isAdmin boolean으로 응답', async () => {
   const ctrl = createAuthController({
     oauth: {}, users: {}, sessions: {}, crypto: stubCrypto(),
     effectivePlan: async () => 'pro',
@@ -182,6 +182,7 @@ test('me: { user: { login, name, avatarUrl }, tokenInvalid, plan } 형태로 응
       user: { login: 'octocat', name: 'Octo', avatarUrl: 'http://a/x.png' },
       tokenInvalid: true,
       plan: 'pro',
+      isAdmin: false,
     },
   });
 });

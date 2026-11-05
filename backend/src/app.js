@@ -10,6 +10,7 @@ import statsRoutes from './routes/stats.routes.js';
 import authRoutes from './routes/auth.routes.js';
 import localizationRoutes from './routes/localization.routes.js';
 import billingRoutes from './routes/billing.routes.js';
+import adminRoutes from './routes/admin.routes.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createPublicDeps, mountPublic } from './public-mount.js';
@@ -34,10 +35,12 @@ export function createApp({ publicDeps = createPublicDeps() } = {}) {
     crossOriginEmbedderPolicy: false,
     frameguard: { action: 'deny' },
   }));
+  app.use(cookieParser());
+  // Admin authenticates even unsupported methods before any body parser can reject them.
+  app.use('/api/admin', adminRoutes);
   // Paddle 웹훅 서명 검증에는 raw body가 필요하므로, JSON 파서보다 먼저 등록한다.
   app.use('/api/billing/webhook', express.raw({ type: 'application/json', limit: '1mb' }));
   app.use(express.json());
-  app.use(cookieParser());
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 

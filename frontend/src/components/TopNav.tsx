@@ -130,6 +130,20 @@ export default function TopNav() {
                   >
                     {t('nav.billing')}
                   </button>
+                  {me.isAdmin === true && (
+                    <button
+                      type="button"
+                      className={styles.dropdownItem}
+                      role="menuitem"
+                      lang="ko"
+                      onClick={() => {
+                        setMenuOpen(false);
+                        navigate('/admin');
+                      }}
+                    >
+                      운영 현황
+                    </button>
+                  )}
                   <div className={styles.dropdownDivider} role="separator" />
                   <button type="button" className={styles.dropdownItem} role="menuitem" onClick={handleLogout}>
                     {t('nav.logout')}

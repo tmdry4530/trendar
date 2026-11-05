@@ -8,6 +8,7 @@ import { encryptToken, newSessionToken, hashSessionToken } from '../utils/crypto
 import { SESSION_COOKIE } from '../middleware/requireAuth.js';
 import { effectivePlan } from '../services/billing.js';
 import { createSignupAttribution } from '../services/public-analytics.js';
+import { isAdmin } from '../config/admin.js';
 
 const OAUTH_STATE_COOKIE = 'oauth_state';
 const OAUTH_NEXT_COOKIE = 'oauth_next';
@@ -128,6 +129,7 @@ export function createAuthController(deps) {
         },
         tokenInvalid: req.user.token_invalid,
         plan,
+        isAdmin: isAdmin(req.user),
       },
     });
   }
