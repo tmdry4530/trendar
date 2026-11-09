@@ -397,3 +397,40 @@ test('Search 호출 전마다 pacer.pace()를 기다린다 — 실행당 pacer 1
   assert.equal(searches, 2 * buildSlices().length);
   assert.equal(paces, searches);
 });
+
+function trendOnlyRunner({ users, loaders, scanRepos }) {
+  return createEtlRunner({
+    users,
+    decryptToken: (enc) => enc,
+    createOctokit: (token) => ({ token }),
+    // base 하한은 환경(ETL_MIN_STARS)에 따라 달라 trend 슬라이스만 결과를 돌려준다.
+    extractRepos: async (wq, octokit, opts) => (opts?.createdAfter ? [{ ...rawItem(500, 100), pushed_at: '2026-11-08T08:40:39Z' }, rawItem(501, 100)] : []),
+    normalizeRepo,
+    computeDelta,
+    loaders,
+    queryFn: async () => [{ id: 30, query: 'q', query_type: 'keyword' }],
+    scanRepos,
+  });
+}
+
+test('README 판정: 저장한 저장소를 사용자 토큰 octokit으로 검사한다', async () => {
+  const scans = [];
+  const users = makeUsers({ byId: { 21: validUser(21, 'octo') } });
+  const runner = trendOnlyRunner({ users, loaders: makeLoaders(), scanRepos: async (octokit, targets) => { scans.push({ octokit, targets }); } });
+  await runner.runPipelineForUser(21);
+  assert.equal(scans.length, 1);
+  assert.deepEqual(scans[0].octokit, { token: 'enc-tok-21' });
+  assert.deepEqual(scans[0].targets, [
+    { github_id: 500, owner: 'o', name: 'r500', pushed_at: '2026-11-08T08:40:39Z' },
+    { github_id: 501, owner: 'o', name: 'r501', pushed_at: null },
+  ]);
+});
+
+test('README 판정: 검사 실패는 수집 결과와 ETL 상태를 바꾸지 않는다', async () => {
+  const users = makeUsers({ byId: { 22: validUser(22, 'octo') } });
+  const runner = trendOnlyRunner({ users, loaders: makeLoaders(), scanRepos: async () => { throw new Error('DB down'); } });
+  const result = await runner.runPipelineForUser(22);
+  assert.equal(result.repos_upserted, 2);
+  assert.deepEqual(result.errors, []);
+  assert.equal(users.calls.updateEtlResult[0].status, 'ok');
+});

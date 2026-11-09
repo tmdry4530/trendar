@@ -2,6 +2,7 @@ import { pool } from '../config/db.js';
 import { rankUserRising } from '../services/rising-response.js';
 
 export { rankUserRising };
+import { MALICIOUS_FILTER } from './security.model.js';
 
 function toRepo(r) {
   return {
@@ -83,7 +84,9 @@ export async function stats(userId) {
 // 성장률 상위 — 1,000스타 미만과 정체 레포는 제외한 뒤 증가율로 정렬한다.
 export function buildTrendsQuery(userId, limit = 10) {
   return {
-    sql: 'SELECT id, full_name, stars, star_delta, growth_rate, language FROM repos WHERE user_id = ? AND stars >= 1000 AND star_delta > 0 ORDER BY growth_rate DESC, star_delta DESC LIMIT ?',
+    sql: `SELECT r.id, r.full_name, r.stars, r.star_delta, r.growth_rate, r.language FROM repos r
+          WHERE r.user_id = ? AND r.stars >= 1000 AND r.star_delta > 0 AND ${MALICIOUS_FILTER('r')}
+          ORDER BY r.growth_rate DESC, r.star_delta DESC LIMIT ?`,
     params: [userId, Number(limit)],
   };
 }
@@ -99,10 +102,11 @@ export async function trends(userId, limit = 10) {
 // 스냅샷은 최근 recentDays일치(기준선 cur−24h와 가속도용 이전 기준선까지 최대 72h 필요) + 가장 이른 스냅샷.
 export function buildRisingCandidatesQuery(userId, windowDays) {
   return {
-    sql: `SELECT id, github_id, full_name, owner, name, html_url, description, language, stars, star_delta, github_created_at
-          FROM repos
-          WHERE user_id = ?
-            AND github_created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+    sql: `SELECT r.id, r.github_id, r.full_name, r.owner, r.name, r.html_url, r.description, r.language, r.stars, r.star_delta, r.github_created_at
+          FROM repos r
+          WHERE r.user_id = ?
+            AND r.github_created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND ${MALICIOUS_FILTER('r')}`,
     params: [Number(userId), Number(windowDays)],
   };
 }

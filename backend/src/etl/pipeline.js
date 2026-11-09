@@ -10,6 +10,8 @@ import { normalizeRepo, computeDelta } from './transform.js';
 import { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot } from './load.js';
 import { trendWindowDays, trendMinStars, freshWindowDays, freshMinStars, searchIntervalMs } from '../utils/limits.js';
 import { createPacer } from './public-extract.js';
+import { createReadmeScanner } from '../services/readme-scan.js';
+import * as securityModel from '../models/security.model.js';
 
 const MIN_STARS = Number(process.env.ETL_MIN_STARS) || 0;
 const TOKEN_INVALID_MESSAGE = 'GitHub 연결이 유효하지 않습니다. 다시 로그인해 주세요.';
@@ -63,6 +65,7 @@ export function createEtlRunner(deps) {
     queryFn,
     // 토큰별 Search API 30회/분 한도 보호. 실행(사용자)마다 새 pacer를 만든다. 미주입 시 대기 없음(테스트).
     makePacer = () => ({ pace: async () => {} }),
+    scanRepos,
   } = deps;
 
   const running = new Set();
@@ -98,6 +101,7 @@ export function createEtlRunner(deps) {
 
       // 실행(run) 단위 dedup — 슬라이스·조건 간 같은 github_id는 1회만 적재해 스냅샷 오염을 막는다 (R3).
       const seen = new Set();
+      const scanTargets = [];
       // 슬라이스별 스타 하한·created:> 하한이 다르다 (R1). 실행당 1회만 계산한다.
       const slices = buildSlices(new Date());
       const pacer = makePacer();
@@ -122,6 +126,7 @@ export function createEtlRunner(deps) {
               await insertSnapshot(repoId, repo);
               await updateRepoDelta(repoId, delta);
               seen.add(repo.github_id);
+              scanTargets.push({ github_id: item.id, owner: repo.owner, name: repo.name, pushed_at: item.pushed_at ?? null });
               result.repos_upserted++;
               result.snapshots_inserted++;
             }
@@ -136,6 +141,15 @@ export function createEtlRunner(deps) {
           }
         }
         result.queries_processed++;
+      }
+
+      // 판정 실패는 수집 결과·상태를 바꾸지 않는다(R4.2).
+      if (scanRepos && scanTargets.length) {
+        try {
+          await scanRepos(octokit, scanTargets);
+        } catch (e) {
+          console.error(`[etl] user#${userId} readme-scan failed: ${e?.code ?? e?.status ?? e?.name}`);
+        }
       }
 
       const status = result.errors.length ? 'error' : 'ok';
@@ -179,6 +193,7 @@ export const { runPipelineForUser, runPipelineAllUsers, isRunning } = createEtlR
   loaders: { upsertRepo, updateRepoDelta, insertSnapshot, getLastSnapshot },
   queryFn: defaultQueryFn,
   makePacer: () => createPacer({ intervalMs: searchIntervalMs() }),
+  scanRepos: createReadmeScanner({ model: securityModel }).scanRepos,
 });
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
