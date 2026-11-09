@@ -209,6 +209,19 @@ Table public_rank_history {
   }
 }
 
+Table repo_security_verdicts {
+  github_id      bigint [pk, note: 'repos·public_repos 공통 GitHub 저장소 ID']
+  verdict        varchar(16) [not null, note: 'malicious | clean | unknown — malicious만 급상승 조회에서 제외']
+  rule_version   smallint [not null]
+  evidence       varchar(500) [note: '판정 근거 README 발췌. 운영자 조회용, 공개 응답 미포함']
+  repo_pushed_at datetime [note: '검사한 시점의 저장소 pushed_at. 바뀌면 재검사']
+  scanned_at     datetime [not null]
+
+  indexes {
+    verdict [name: 'idx_verdict']
+  }
+}
+
 // 공개 풀은 사용자 테이블과 관계없이 유지된다.
 Ref: public_repo_snapshots.repo_id > public_repos.id [delete: cascade]
 Ref: public_feed_repos.feed_id > public_feeds.id [delete: cascade]

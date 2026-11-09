@@ -355,3 +355,50 @@ test('순위 기록: 401로 중단된 실행은 순위를 남기지 않는다', 
   assert.equal(result.aborted, true);
   assert.equal(modelCalls(calls, 'insertRankHistory').length, 0);
 });
+
+test('README 판정: 수집한 저장소를 github_id당 한 번, 순위 기록 전에 같은 octokit으로 검사한다', async () => {
+  const order = [];
+  const scans = [];
+  const { runner, calls } = fixture({
+    feeds: FEEDS.slice(0, 2),
+    search: () => [rawItem(7, { pushed_at: '2026-10-18T00:00:00Z' }), rawItem(8)],
+    candidates: () => { order.push('rank'); return []; },
+    deps: { scanRepos: async (octokit, targets) => { order.push('scan'); scans.push({ octokit, targets }); } },
+  });
+  await runner.runPublicCollection();
+  assert.equal(scans.length, 1);
+  assert.ok(scans[0].octokit.rest.search, '수집과 같은 octokit');
+  assert.deepEqual(scans[0].targets, [
+    { github_id: 7, owner: 'octo', name: 'repo-7', pushed_at: '2026-10-18T00:00:00Z' },
+    { github_id: 8, owner: 'octo', name: 'repo-8', pushed_at: null },
+  ]);
+  assert.deepEqual(order, ['scan', 'rank', 'rank']);
+  assert.equal(calls.searches.length, 2);
+});
+
+test('README 판정: 검사 실패는 수집 결과와 순위 기록을 막지 않고 로그에 오류 원문을 남기지 않는다', async () => {
+  const { runner, calls } = fixture({
+    feeds: FEEDS.slice(0, 1),
+    search: () => [rawItem(7)],
+    candidates: () => [candidate(1, 1500)],
+    deps: { scanRepos: async () => { throw Object.assign(new Error('Too many connections tok-secret'), { code: 'ER_CON_COUNT_ERROR' }); } },
+  });
+  const result = await runner.runPublicCollection();
+  assert.deepEqual(result, {
+    feeds_total: 1, feeds_ok: 1, feeds_failed: 0, repos_upserted: 1, snapshots_inserted: 1, ranks_recorded: 1, aborted: false,
+  });
+  assert.equal(calls.errors.length, 1);
+  assert.match(calls.errors[0][0], /readme-scan failed name=Error code=ER_CON_COUNT_ERROR/);
+  assert.doesNotMatch(calls.errors[0][0], /tok-secret|Too many/);
+});
+
+test('README 판정: 401로 중단된 실행은 검사하지 않는다', async () => {
+  let scanned = false;
+  const { runner } = fixture({
+    search: () => { throw Object.assign(new Error('Bad credentials'), { status: 401 }); },
+    deps: { scanRepos: async () => { scanned = true; } },
+  });
+  const result = await runner.runPublicCollection();
+  assert.equal(result.aborted, true);
+  assert.equal(scanned, false);
+});

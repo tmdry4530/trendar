@@ -155,6 +155,16 @@ async function migratePublicSchema() {
     CONSTRAINT fk_prh_feed FOREIGN KEY (feed_id) REFERENCES public_feeds(id) ON DELETE CASCADE,
     CONSTRAINT fk_prh_repo FOREIGN KEY (repo_id) REFERENCES public_repos(id) ON DELETE CASCADE
   )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS repo_security_verdicts (
+    github_id BIGINT NOT NULL PRIMARY KEY,
+    verdict ENUM('malicious','clean','unknown') NOT NULL,
+    rule_version SMALLINT UNSIGNED NOT NULL,
+    evidence VARCHAR(500) NULL,
+    repo_pushed_at DATETIME NULL,
+    scanned_at DATETIME NOT NULL,
+    KEY idx_verdict (verdict)
+  )`);
 }
 
 export async function initDb() {

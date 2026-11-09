@@ -40,7 +40,7 @@ test('공개 SQL 빌더는 사용자 테이블을 참조하지 않고 파라미�
     assert.deepEqual(params, expected);
     const tables = [...sql.matchAll(/\b(?:FROM|JOIN)\s+(\w+)/gi)].map((match) => match[1]);
     assert.ok(tables.length);
-    assert.ok(tables.every((table) => table.startsWith('public_')));
+    assert.ok(tables.every((table) => table.startsWith('public_') || table === 'repo_security_verdicts'));
   }
 });
 
@@ -139,7 +139,7 @@ test('레포 후보는 id 조회와 스냅샷 2쿼리를 사용하고 미존재�
 test('공개 레포 조회는 최근 갱신 행을 선택하고 미존재면 null이다', async () => {
   const { result, calls } = await withQueries([[REPO]], () => Public.findPublicRepo('owner', 'repo'));
   assert.deepEqual(result, REPO);
-  assert.match(calls[0].sql, /ORDER BY updated_at DESC, id DESC LIMIT 1/);
+  assert.match(calls[0].sql, /ORDER BY r\.updated_at DESC, r\.id DESC LIMIT 1/);
   assert.deepEqual(calls[0].params, ['owner', 'repo']);
   assert.equal((await withQueries([[]], () => Public.findPublicRepo('none', 'none'))).result, null);
 });

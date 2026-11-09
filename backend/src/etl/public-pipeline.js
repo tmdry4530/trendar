@@ -6,6 +6,8 @@ import * as publicModel from '../models/public.model.js';
 import { allFeeds, feedKey, PUBLIC_MIN_STARS } from '../config/public-feeds.js';
 import { publicRisingConfig, risingWindowDays, searchIntervalMs } from '../utils/limits.js';
 import { rankRising } from '../services/rising-score.js';
+import { createReadmeScanner } from '../services/readme-scan.js';
+import * as securityModel from '../models/security.model.js';
 import { normalizeRepo } from './transform.js';
 import { buildPublicSearchQuery, searchPublicRepos, createPacer } from './public-extract.js';
 
@@ -23,9 +25,13 @@ function logFailure(log, key, error, token) {
   log.error(`[public-etl] ${key} status=${safeLogValue(error?.status ?? error?.code, token)} name=${safeLogValue(error?.name, token)} message=${safeLogValue(error?.message, token)}`);
 }
 
+function scanTarget(item) {
+  return { github_id: item.id, owner: item.owner?.login ?? item.full_name?.split('/')[0], name: item.name, pushed_at: item.pushed_at ?? null };
+}
+
 export function createPublicCollector({
   token, createOctokit, feeds, model, normalizeRepo, searchRepos, buildQuery, pacer,
-  windowDays, minStars, rankRising, risingConfig, now = () => new Date(), log = console,
+  windowDays, minStars, rankRising, risingConfig, scanRepos, now = () => new Date(), log = console,
 }) {
   function isPublicCollectionRunning() {
     return running;
@@ -51,6 +57,7 @@ export function createPublicCollector({
       const feedIds = await model.ensureFeeds(configuredFeeds);
       const octokit = createOctokit(token);
       const seen = new Set();
+      const scanTargets = new Map();
       const result = {
         feeds_total: configuredFeeds.length, feeds_ok: 0, feeds_failed: 0,
         repos_upserted: 0, snapshots_inserted: 0, ranks_recorded: 0, aborted: false,
@@ -69,6 +76,7 @@ export function createPublicCollector({
             if (item.private === true) continue;
             const repo = normalizeRepo(item);
             const repoId = await model.upsertPublicRepo(repo);
+            if (!scanTargets.has(repo.github_id)) scanTargets.set(repo.github_id, scanTarget(item));
             result.repos_upserted++;
             if (!seen.has(repo.github_id)) {
               await model.insertPublicSnapshot(repoId, repo, new Date(now()));
@@ -98,10 +106,23 @@ export function createPublicCollector({
           }
         }
       }
-      if (!result.aborted) await recordRanks(collectedFeedIds, runStartedAt, result);
+      if (!result.aborted) {
+        await scanCollected(octokit, [...scanTargets.values()]);
+        await recordRanks(collectedFeedIds, runStartedAt, result);
+      }
       return result;
     } finally {
       running = false;
+    }
+  }
+
+  // 판정 실패는 수집·순위 기록을 막지 않는다(R4.2). 순위 기록 전에 판정해 malicious를 기록에서 뺀다.
+  async function scanCollected(octokit, targets) {
+    if (!scanRepos || !targets.length) return;
+    try {
+      await scanRepos(octokit, targets);
+    } catch (error) {
+      log.error(`[public-etl] readme-scan failed name=${safeLogValue(error?.name, token)} code=${safeLogValue(error?.code ?? error?.status, token)}`);
     }
   }
 
@@ -135,6 +156,7 @@ export const { runPublicCollection, isPublicCollectionRunning } = createPublicCo
   minStars: PUBLIC_MIN_STARS,
   rankRising,
   risingConfig: publicRisingConfig(),
+  scanRepos: createReadmeScanner({ model: securityModel }).scanRepos,
 });
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {

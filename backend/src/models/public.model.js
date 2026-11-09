@@ -1,5 +1,6 @@
 import { pool } from '../config/db.js';
 import { feedKey } from '../config/public-feeds.js';
+import { MALICIOUS_FILTER } from './security.model.js';
 
 export async function ensureFeeds(feeds) {
   if (!feeds.length) return new Map();
@@ -75,7 +76,8 @@ export function buildFeedCandidatesQuery({ feedId, windowDays, membershipHours }
           JOIN public_repos r ON r.id = f.repo_id
           WHERE f.feed_id = ?
             AND f.last_seen_at >= DATE_SUB(NOW(), INTERVAL ? HOUR)
-            AND r.github_created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)`,
+            AND r.github_created_at >= DATE_SUB(NOW(), INTERVAL ? DAY)
+            AND ${MALICIOUS_FILTER('r')}`,
     params: [Number(feedId), Number(membershipHours), Number(windowDays)],
   };
 }
@@ -137,7 +139,8 @@ export async function feedCandidates(feedId, { windowDays, recentDays = 4, membe
 
 export async function findPublicRepo(owner, name) {
   const [[repo]] = await pool.query(
-    'SELECT * FROM public_repos WHERE owner = ? AND name = ? ORDER BY updated_at DESC, id DESC LIMIT 1',
+    `SELECT r.* FROM public_repos r WHERE r.owner = ? AND r.name = ? AND ${MALICIOUS_FILTER('r')}
+      ORDER BY r.updated_at DESC, r.id DESC LIMIT 1`,
     [owner, name]
   );
   return repo || null;

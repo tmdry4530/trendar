@@ -37,7 +37,7 @@ function candidate(id, { ageDays, series, star_delta = 0 }) {
 test('신생 급상승 후보 쿼리 — 사용자 격리 + 생성 windowDays일 이내', () => {
   const { sql, params } = buildRisingCandidatesQuery(42, 15);
   const compactSql = sql.replace(/\s+/g, ' ').trim();
-  assert.match(compactSql, /FROM repos WHERE user_id = \? AND github_created_at >= DATE_SUB\(NOW\(\), INTERVAL \? DAY\)/);
+  assert.match(compactSql, /FROM repos r WHERE r\.user_id = \? AND r\.github_created_at >= DATE_SUB\(NOW\(\), INTERVAL \? DAY\) AND NOT EXISTS/);
   assert.deepEqual(params, [42, 15]);
 });
 
@@ -105,6 +105,7 @@ test('rankUserRising — 24h 기준선이 없어도 부분 구간(6h 이상)으�
 
 test('빠르게 성장 중 쿼리 — 1,000스타 이상만 증가율로 정렬한다', () => {
   const { sql, params } = buildTrendsQuery(42, 10);
-  assert.match(sql, /stars >= 1000 AND star_delta > 0 ORDER BY growth_rate DESC/);
+  const compactSql = sql.replace(/\s+/g, ' ');
+  assert.match(compactSql, /r\.stars >= 1000 AND r\.star_delta > 0 AND .* ORDER BY r\.growth_rate DESC/);
   assert.deepEqual(params, [42, 10]);
 });
