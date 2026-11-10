@@ -30,6 +30,7 @@ Trendar는 관심 키워드에 매칭되는 레포의 스타 수를 **6시간마
 - **남용 방지** — 수동 수집에 사용자별 **일일 한도**(기본 10회, KST 자정 리셋), 조건 개수 상한
 - **공개 트렌드** — 로그인 없이 볼 수 있는 서버 렌더 페이지(`/trending`, 언어·주제별 피드, 레포 페이지, 한국어 `/ko`). 서버 전용 토큰으로 모은 공개 풀을 하루 환산 증가 속도로 랭킹하고, 링크 미리보기 PNG·README 배지·동적 sitemap을 제공 ([공개 트렌드](#공개-트렌드) 참고)
 - **악성 저장소 제외** — 수집 때 README를 읽어, 원격 스크립트 즉시 실행 지시와 백신·실시간 보호 끄기 안내가 **함께** 있는 저장소를 대시보드 급상승·성장률 상위와 공개 트렌드에서 숨긴다 ([악성 저장소 제외](#악성-저장소-제외) 참고)
+- **급상승 알림 웹훅** — 수집이 끝날 때 대시보드 신생 급상승(상위 8개)에 새로 들어온 저장소를, 사용자가 등록한 URL로 서명해 보낸다. Discord·Slack 수신 주소는 그 서비스가 읽는 형식으로 보낸다 ([급상승 알림 웹훅](#급상승-알림-웹훅) 참고)
 
 ---
 
@@ -129,6 +130,8 @@ erDiagram
 관계는 전부 `ON DELETE CASCADE` — 계정 탈퇴 시 세션·조건·레포·스냅샷이 연쇄 삭제된다.
 
 공개 풀 테이블(`public_feeds`, `public_repos`, `public_repo_snapshots`, `public_feed_repos`, `public_daily_metrics`)은 사용자 테이블과 연결이 없어 탈퇴해도 남는다. 피드 이름·검색어는 DB가 아니라 `backend/src/config/public-feeds.js`가 기준이다.
+
+급상승 알림 웹훅 테이블(`webhook_endpoints`, `webhook_deliveries`, `webhook_notified_repos`)은 `users`에 `ON DELETE CASCADE`로 묶여 있어 탈퇴하면 수신 URL·발신 기록·보냄 기록이 함께 지워진다.
 </details>
 
 주요 설계 결정은 ADR로 기록되어 있다 (`.claude/specs/adr/`): 완전 사용자별 격리 · OAuth App 선택 · DB 세션 · 일일 한도 카운터.
@@ -194,6 +197,82 @@ npm run dev                        # http://localhost:5173 (/api 와 공개 경�
 
 ---
 
+## 급상승 알림 웹훅
+
+로그인한 사용자가 **계정 메뉴 → 알림 웹훅**(`/account/webhook`)에서 수신 URL을 하나 등록하면, 수집(6시간 크론·수동)이 끝날 때마다 자기 대시보드 **신생 급상승 상위 8개**에 새로 들어온 저장소를 그 URL로 `POST`한다.
+
+- **새 진입 기준**: 같은 저장소는 사용자당 한 번만 알린다. 처음 등록할 때와 꺼 두었다가 다시 켤 때 그 시점의 상위 8개는 이미 보낸 것으로 기록하므로, 등록 직후 알림이 몰리지 않는다. 판정은 수집이 끝나는 시점에만 하므로 두 수집 사이에 잠깐 들어왔다 빠진 저장소는 알리지 않는다. 악성 판정 저장소는 급상승에서 빠지므로 알림에도 없다.
+- **수신 URL**: `https://` 주소만 받는다. 루프백·사설·링크로컬 등 내부 주소로 풀리는 호스트는 거부하고, 발신할 때마다 다시 확인한 주소로만 연결한다(리다이렉트는 따라가지 않는다). URL과 서명 키는 암호화해 저장하고 화면에는 호스트와 끝 4자만 보인다.
+- **서명 키**: 등록·재발급 직후 화면에 한 번만 표시된다. 잃어버리면 재발급한다.
+- **Discord·Slack**: `discord.com/api/webhooks/…`는 `{ "content": … }`, `hooks.slack.com/…`은 `{ "text": … }` 본문으로 저장소 이름·스타·하루 증가·링크를 보낸다.
+
+### 본문과 헤더
+
+```http
+POST /your/hook HTTP/1.1
+Content-Type: application/json
+User-Agent: Trendar-Webhook/1
+X-Trendar-Event: rising.new
+X-Trendar-Delivery: 3f1c9c0e-6c1b-4f5e-9d0a-2b7f0f6f3a11
+X-Trendar-Signature: t=1794268800,v1=<hex>
+```
+
+```json
+{
+  "id": "3f1c9c0e-6c1b-4f5e-9d0a-2b7f0f6f3a11",
+  "event": "rising.new",
+  "created_at": "2026-11-10T06:00:12.000Z",
+  "data": {
+    "repos": [
+      {
+        "github_id": 123456789, "full_name": "owner/name", "html_url": "https://github.com/owner/name",
+        "description": "…", "language": "Go", "stars": 1840,
+        "rate_24h": 612.5, "growth_rate_24h": 0.5, "age_days": 3.2, "rank": 1, "estimated": false
+      }
+    ]
+  }
+}
+```
+
+`rate_24h`는 하루 환산 스타 증가, `rank`는 알림 시점의 급상승 순위, `estimated`는 24시간 전 기록이 없어 짧은 구간을 하루로 환산한 값이라는 뜻이다. 화면의 **테스트 발신**은 `event: "ping"`, `data: {}`를 보낸다.
+
+### 서명 검증
+
+`X-Trendar-Signature`의 `v1`은 `HMAC-SHA256(서명 키, "<t>.<요청 본문 그대로>")`의 hex다. 본문을 JSON으로 다시 직렬화하지 말고 받은 바이트 그대로 검증한다. `t`(유닉스 초)가 너무 오래된 요청은 버린다.
+
+```js
+import { createHmac, timingSafeEqual } from 'node:crypto';
+
+export function verifyTrendarSignature(rawBody, header, secret, toleranceSeconds = 300) {
+  const match = /^t=(\d+),v1=([0-9a-f]{64})$/.exec(header ?? '');
+  if (!match) return false;
+  const [, timestamp, signature] = match;
+  if (Math.abs(Date.now() / 1000 - Number(timestamp)) > toleranceSeconds) return false;
+  const expected = createHmac('sha256', secret).update(`${timestamp}.${rawBody}`).digest();
+  return timingSafeEqual(expected, Buffer.from(signature, 'hex'));
+}
+```
+
+### 재시도와 자동 꺼짐
+
+- `2xx` 응답이면 성공이다. 그 밖의 상태·리다이렉트·5초 초과·연결 실패는 **1분 → 5분 → 30분 → 2시간** 뒤 다시 보내 총 5회까지 시도한다. 대기 중인 발신은 DB에 있어 서버가 재시작해도 이어진다.
+- 재시도는 같은 `X-Trendar-Delivery`와 같은 본문으로 간다. 드물게 같은 발신이 두 번 도착할 수 있으므로 받는 쪽은 이 값으로 중복을 거른다.
+- 알림 3건이 연속으로 끝내 실패하면 수신 URL을 자동으로 끄고 화면에 표시한다. 다시 켜면 그때부터 새 진입만 보낸다. 테스트 발신 실패는 세지 않는다.
+- 5회 모두 실패했거나 꺼서 취소된 알림에 들어 있던 저장소는 다시 보내지 않는다. 발신 기록은 최근 10건을 화면에 보여 주고 30일 뒤 지운다.
+
+| API (로그인 세션 필요) | 내용 |
+| --- | --- |
+| `GET /api/webhook` | 가린 URL·형식·사용 여부·자동 꺼짐, 최근 발신 10건 |
+| `PUT /api/webhook` `{ url }` | 등록(201, 서명 키 1회 반환) 또는 URL 변경(200) |
+| `PATCH /api/webhook` `{ enabled }` | 켜기·끄기 (끄면 대기 중인 발신 취소) |
+| `POST /api/webhook/secret` | 서명 키 재발급 |
+| `POST /api/webhook/test` | `ping` 1회 발신과 결과 (사용자당 10초에 1회) |
+| `DELETE /api/webhook` | 수신 URL·발신 기록·보냄 기록 삭제 |
+
+로컬에서 `http://localhost` 수신 서버로 시험하려면 백엔드 환경변수 `WEBHOOK_ALLOW_PRIVATE_TARGETS=true`를 둔다. 운영(`NODE_ENV=production`)에서는 이 값과 무관하게 내부 주소와 `http`를 받지 않는다.
+
+---
+
 ## 공개 트렌드
 
 로그인하지 않은 방문자·검색엔진·링크 미리보기를 위한 서버 렌더 페이지다. 기존 로그인 기능(대시보드·조건·레포)은 그대로이고, 로그인 사용자 헤더에는 `트렌드` 링크가 추가된다.
@@ -255,10 +334,12 @@ node src/etl/public-pipeline.js    # 피드 33개 기준 Search 33회 × 2.1초 
 
 ### 악성 저장소 제외
 
-공개 수집과 사용자 수집은 처리한 저장소의 README를 GitHub API로 읽어 판정하고 `repo_security_verdicts`(github_id 기준, 대시보드·공개 풀 공유)에 남긴다. README 텍스트만 읽으며 링크·첨부·코드는 내려받거나 실행하지 않는다.
+공개 수집과 사용자 수집은 처리한 저장소의 README를 GitHub API로 읽어 판정하고 `repo_security_verdicts`(github_id 기준, 대시보드·공개 풀 공유)에 남긴다. README 텍스트와 검색 응답에 이미 있는 메타(language·forks·size)만 쓰며 링크·첨부·코드는 내려받거나 실행하지 않는다. 현재 규칙은 2판(`rule_version = 2`)이다.
 
-- **malicious** — README에 원격 스크립트를 받아 바로 실행하라는 명령(`irm … | iex`, `irm … | &(gcm i*x)`, `curl … | sh` 등)과 Windows Defender·실시간 보호·백신을 끄거나 일시 중지하라는 안내가 **둘 다** 있을 때만. 2026-11 공개 피드에 올라온 가짜 크랙·치트 저장소 군집(`windows-defender.cc` 스크립트 실행 + 실시간 보호 중지)이 기준 사례다.
-- **clean** — 둘 중 하나만 있거나 둘 다 없음. 정상 설치 안내(`irm https://get.scoop.sh | iex` 등), 백신 예외 등록 안내, SmartScreen 통과 안내, 스타 급증만으로는 숨기지 않는다.
+- **malicious** — README에 아래 두 신호가 **둘 다** 있을 때만. 2026-11 공개 피드에 올라온 가짜 크랙·치트 저장소 군집(`windows-defender.cc` 스크립트 실행 + 실시간 보호 중지)이 기준 사례다.
+  - **실행 지시**: 원격 스크립트를 받아 바로 실행하는 명령. 파이프(`irm … | iex`, `irm … | &(gcm i*x)`, `curl … | sh`), 저장 후 실행(`curl … > run.ps1 && powershell -File run.ps1`, 같은 코드블록의 다음 3줄 안에서 실행하는 경우 포함), 치환(`bash <(curl …)`, `sh -c "$(curl …)"`, `[scriptblock]::Create((irm …))`), `mshta https://…`, 그리고 `powershell -enc <base64>`를 풀었을 때 본문에 위 형태가 있는 경우.
+  - **보호 해제 안내**: Windows Defender·실시간 보호·백신을 끄거나 일시 중지하라는 영어 문구와 명령(`Set-MpPreference -Disable…`, `sc stop WinDefend`, `DisableAntiSpyware` 레지스트리 값 1). 보호 대상을 일반 명사(security software·firewall 등)로만 쓴 명령형 문구는 코드 없는 저장소(language 없음, forks 0, size 100KB 이하)일 때만 인정한다. 영어가 아닌 문구는 부정·금지 표현을 가려낼 수 없어 판정에 쓰지 않는다.
+- **clean** — 둘 중 하나만 있거나 둘 다 없음. 정상 설치 안내(`irm https://get.scoop.sh | iex` 등), 백신 예외 등록 안내, SmartScreen 통과 안내, 부정문("끄지 마세요"), 스타 급증, 코드 없는 저장소라는 사실만으로는 숨기지 않는다.
 - **unknown** — 처음 검사할 때 README 조회가 실패함. 노출되고 다음 수집에서 다시 검사한다. 이미 판정이 있으면 조회 실패 시 기존 판정을 유지한다.
 
 판정이 없거나 `unknown`이거나 저장소 `pushed_at`·규칙 버전이 바뀐 경우에만 README를 다시 읽는다. `malicious`는 대시보드 신생 급상승·성장률 상위, 공개 랜딩·피드·OG·sitemap·순위 기록에서 빠지고, 레포 페이지·레포 OG는 404, 배지는 중립으로 응답한다. 행·스냅샷은 지우지 않으므로 README가 고쳐져 재검사에서 `clean`이 되면 다음 수집 뒤(공개 페이지는 서버 캐시 최대 10분, 배지는 HTTP 캐시 최대 1시간) 다시 노출된다. 판정 근거는 운영자만 DB에서 본다.

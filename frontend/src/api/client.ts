@@ -26,6 +26,9 @@ const ERROR_MESSAGE_KEYS: Record<string, string> = {
   GITHUB_TOKEN_INVALID: 'errors.githubExpired',
   QUERY_LIMIT_EXCEEDED: 'errors.queryLimit',
   DUPLICATE: 'errors.duplicate',
+  WEBHOOK_URL_INVALID: 'errors.webhookUrlInvalid',
+  WEBHOOK_URL_BLOCKED: 'errors.webhookUrlBlocked',
+  WEBHOOK_TEST_RATE_LIMITED: 'errors.webhookTestRateLimit',
 };
 
 function errorMessage(code: string, status: number): string {
@@ -112,6 +115,7 @@ export const api = {
   get: <T>(path: string, query?: QueryRecord) => request<T>(path, { method: 'GET', query }),
   post: <T>(path: string, body?: unknown, query?: QueryRecord) =>
     request<T>(path, { method: 'POST', body, query }),
+  put: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PUT', body }),
   patch: <T>(path: string, body?: unknown) => request<T>(path, { method: 'PATCH', body }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };

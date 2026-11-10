@@ -9,6 +9,10 @@ const USER_MESSAGES = {
   ETL_DAILY_LIMIT_EXCEEDED: '오늘 수동 수집 횟수를 모두 사용했습니다. 한국 시간 자정에 다시 사용할 수 있습니다.',
   ETL_ALREADY_RUNNING: '이미 수집이 진행 중입니다. 끝난 뒤 다시 시도해 주세요.',
   GITHUB_TOKEN_INVALID: 'GitHub 연결이 만료되었습니다. 다시 로그인해 주세요.',
+  WEBHOOK_URL_INVALID: '수신 URL을 확인해 주세요. https로 시작하는 주소만 등록할 수 있습니다.',
+  WEBHOOK_URL_BLOCKED: '이 주소로는 보낼 수 없습니다. 인터넷에서 접근할 수 있는 주소를 입력해 주세요.',
+  WEBHOOK_TEST_RATE_LIMITED: '테스트 발신은 10초에 한 번만 할 수 있습니다.',
+  WEBHOOK_SAVE_IN_PROGRESS: '이전 저장 요청을 처리하고 있습니다. 잠시 후 다시 시도해 주세요.',
   INTERNAL_ERROR: '요청을 처리하지 못했습니다. 잠시 후 다시 시도해 주세요.',
 };
 

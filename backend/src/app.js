@@ -11,6 +11,7 @@ import authRoutes from './routes/auth.routes.js';
 import localizationRoutes from './routes/localization.routes.js';
 import billingRoutes from './routes/billing.routes.js';
 import adminRoutes from './routes/admin.routes.js';
+import webhookRoutes, { noStore } from './routes/webhook.routes.js';
 import { requireAuth } from './middleware/requireAuth.js';
 import { errorHandler } from './middleware/errorHandler.js';
 import { createPublicDeps, mountPublic } from './public-mount.js';
@@ -51,6 +52,7 @@ export function createApp({ publicDeps = createPublicDeps() } = {}) {
   app.use('/api/queries', requireAuth, queryRoutes);
   app.use('/api/repos', requireAuth, repoRoutes);
   app.use('/api/etl', requireAuth, etlRoutes);
+  app.use('/api/webhook', noStore, requireAuth, webhookRoutes);
   app.use('/api', requireAuth, statsRoutes);
 
   // 공개 SSR·이미지 라우트는 SPA 정적 서빙보다 먼저 응답해야 한다(`/`, `/sitemap.xml` 포함).

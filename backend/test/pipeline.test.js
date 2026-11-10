@@ -398,7 +398,7 @@ test('Search 호출 전마다 pacer.pace()를 기다린다 — 실행당 pacer 1
   assert.equal(paces, searches);
 });
 
-function trendOnlyRunner({ users, loaders, scanRepos }) {
+function trendOnlyRunner({ users, loaders, scanRepos, notifyRising }) {
   return createEtlRunner({
     users,
     decryptToken: (enc) => enc,
@@ -410,6 +410,7 @@ function trendOnlyRunner({ users, loaders, scanRepos }) {
     loaders,
     queryFn: async () => [{ id: 30, query: 'q', query_type: 'keyword' }],
     scanRepos,
+    notifyRising,
   });
 }
 
@@ -421,8 +422,8 @@ test('README 판정: 저장한 저장소를 사용자 토큰 octokit으로 검�
   assert.equal(scans.length, 1);
   assert.deepEqual(scans[0].octokit, { token: 'enc-tok-21' });
   assert.deepEqual(scans[0].targets, [
-    { github_id: 500, owner: 'o', name: 'r500', pushed_at: '2026-11-08T08:40:39Z' },
-    { github_id: 501, owner: 'o', name: 'r501', pushed_at: null },
+    { github_id: 500, owner: 'o', name: 'r500', pushed_at: '2026-11-08T08:40:39Z', language: 'JS', forks: 1, size: null },
+    { github_id: 501, owner: 'o', name: 'r501', pushed_at: null, language: 'JS', forks: 1, size: null },
   ]);
 });
 
@@ -433,4 +434,37 @@ test('README 판정: 검사 실패는 수집 결과와 ETL 상태를 바꾸지 �
   assert.equal(result.repos_upserted, 2);
   assert.deepEqual(result.errors, []);
   assert.equal(users.calls.updateEtlResult[0].status, 'ok');
+});
+
+test('급상승 알림: 판정과 수집 결과 기록이 끝난 뒤 그 사용자로 한 번 호출한다', async () => {
+  const order = [];
+  const users = makeUsers({ byId: { 23: validUser(23, 'octo') } });
+  const updateEtlResult = users.updateEtlResult;
+  users.updateEtlResult = async (...args) => { order.push('result'); return updateEtlResult(...args); };
+  const runner = trendOnlyRunner({
+    users, loaders: makeLoaders(),
+    scanRepos: async () => { order.push('scan'); },
+    notifyRising: async (userId) => { order.push(`notify:${userId}`); },
+  });
+  await runner.runPipelineForUser(23);
+  assert.deepEqual(order, ['scan', 'result', 'notify:23']);
+});
+
+test('급상승 알림: 알림 준비가 실패해도 수집 결과와 ETL 상태는 그대로다', async (t) => {
+  const logged = [];
+  t.mock.method(console, 'error', (...args) => logged.push(args.join(' ')));
+  const users = makeUsers({ byId: { 24: validUser(24, 'octo') } });
+  const quiet = trendOnlyRunner({ users, loaders: makeLoaders() });
+  const expected = await quiet.runPipelineForUser(24);
+
+  const failing = makeUsers({ byId: { 24: validUser(24, 'octo') } });
+  const runner = trendOnlyRunner({
+    users: failing, loaders: makeLoaders(),
+    notifyRising: async () => { throw Object.assign(new Error('pool closed https://hooks.example/secret'), { code: 'POOL_CLOSED' }); },
+  });
+  const result = await runner.runPipelineForUser(24);
+  assert.deepEqual(result, expected);
+  assert.deepEqual(failing.calls.updateEtlResult, users.calls.updateEtlResult);
+  assert.equal(runner.isRunning(24), false);
+  assert.deepEqual(logged, ['[etl] user#24 webhook notify failed: POOL_CLOSED']);
 });

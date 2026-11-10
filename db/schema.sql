@@ -4,6 +4,9 @@ CREATE DATABASE IF NOT EXISTS trendar
 
 USE trendar;
 
+DROP TABLE IF EXISTS webhook_notified_repos;
+DROP TABLE IF EXISTS webhook_deliveries;
+DROP TABLE IF EXISTS webhook_endpoints;
 DROP TABLE IF EXISTS repo_snapshots;
 DROP TABLE IF EXISTS repos;
 DROP TABLE IF EXISTS watch_queries;
@@ -203,4 +206,47 @@ CREATE TABLE IF NOT EXISTS repo_security_verdicts (
   repo_pushed_at DATETIME NULL,
   scanned_at DATETIME NOT NULL,
   KEY idx_verdict (verdict)
+);
+
+-- 급상승 알림 웹훅. 수신 URL과 서명 키는 암호화해 저장하고, 발신은 webhook_deliveries(outbox)에서 재시도한다.
+CREATE TABLE IF NOT EXISTS webhook_endpoints (
+  user_id INT NOT NULL PRIMARY KEY,
+  url_enc TEXT NOT NULL,
+  secret_enc TEXT NOT NULL,
+  url_hint VARCHAR(300) NOT NULL,
+  format ENUM('generic','discord','slack') NOT NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  auto_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+  consecutive_failures INT NOT NULL DEFAULT 0,
+  created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  CONSTRAINT fk_whe_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS webhook_deliveries (
+  id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  delivery_id CHAR(36) NOT NULL,
+  event VARCHAR(32) NOT NULL,
+  payload MEDIUMTEXT NOT NULL,
+  status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',
+  attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+  max_attempts TINYINT UNSIGNED NOT NULL DEFAULT 5,
+  next_attempt_at DATETIME NULL,
+  last_status_code SMALLINT UNSIGNED NULL,
+  last_error_code VARCHAR(32) NULL,
+  created_at DATETIME NOT NULL,
+  completed_at DATETIME NULL,
+  UNIQUE KEY uq_delivery (delivery_id),
+  KEY idx_due (status, next_attempt_at),
+  KEY idx_user_created (user_id, created_at),
+  CONSTRAINT fk_whd_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS webhook_notified_repos (
+  user_id INT NOT NULL,
+  github_id BIGINT NOT NULL,
+  notified_at DATETIME NOT NULL,
+  PRIMARY KEY (user_id, github_id),
+  CONSTRAINT fk_whn_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );

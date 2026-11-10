@@ -262,3 +262,28 @@ export interface AdminFeed {
 export interface AdminFeedsResult {
   items: AdminFeed[];
 }
+
+/** /api/webhook — 백엔드와 공유하는 계약 타입(shared/api-types.ts) */
+export type { WebhookEndpoint, WebhookDelivery, WebhookSettings, WebhookFormat } from '../../shared/api-types';
+import type { WebhookEndpoint as SharedWebhookEndpoint, WebhookDelivery as SharedWebhookDelivery } from '../../shared/api-types';
+
+/** PUT /api/webhook 응답. secret은 새로 등록했을 때만 온다 */
+export interface WebhookSaveResult {
+  endpoint: SharedWebhookEndpoint;
+  secret?: string;
+}
+
+/** PATCH /api/webhook 응답 */
+export interface WebhookEndpointResult {
+  endpoint: SharedWebhookEndpoint;
+}
+
+/** POST /api/webhook/secret 응답 */
+export interface WebhookSecretResult {
+  secret: string;
+}
+
+/** POST /api/webhook/test 응답 */
+export interface WebhookTestResult {
+  delivery: SharedWebhookDelivery | null;
+}

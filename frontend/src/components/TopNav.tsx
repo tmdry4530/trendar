@@ -130,6 +130,17 @@ export default function TopNav() {
                   >
                     {t('nav.billing')}
                   </button>
+                  <button
+                    type="button"
+                    className={styles.dropdownItem}
+                    role="menuitem"
+                    onClick={() => {
+                      setMenuOpen(false);
+                      navigate('/account/webhook');
+                    }}
+                  >
+                    {t('nav.webhook')}
+                  </button>
                   {me.isAdmin === true && (
                     <button
                       type="button"

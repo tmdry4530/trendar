@@ -222,9 +222,56 @@ Table repo_security_verdicts {
   }
 }
 
+Table webhook_endpoints {
+  user_id              int [pk, note: '사용자당 수신 URL 1개']
+  url_enc              text [not null, note: 'AES-256-GCM. Discord·Slack 주소는 그 자체가 비밀']
+  secret_enc           text [not null, note: '서명 키(AES-256-GCM). 평문은 생성·재발급 응답에서만 1회']
+  url_hint             varchar(300) [not null, note: '화면용 가린 주소(호스트와 끝 4자)']
+  format               varchar(16) [not null, note: 'generic | discord | slack']
+  enabled              boolean [not null, default: true]
+  auto_disabled        boolean [not null, default: false, note: '알림 3건 연속 최종 실패로 꺼짐']
+  consecutive_failures int [not null, default: 0]
+  created_at           timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  updated_at           timestamp [not null, default: `CURRENT_TIMESTAMP`]
+}
+
+Table webhook_deliveries {
+  id               bigint [pk, increment]
+  user_id          int [not null]
+  delivery_id      char(36) [not null, unique, note: 'X-Trendar-Delivery. 재시도에도 같음']
+  event            varchar(32) [not null, note: 'rising.new | ping']
+  payload          mediumtext [not null, note: '일반 형식 이벤트 JSON']
+  status           varchar(16) [not null, default: 'pending', note: 'pending | success | failed']
+  attempts         tinyint [not null, default: 0]
+  max_attempts     tinyint [not null, default: 5]
+  next_attempt_at  datetime
+  last_status_code smallint
+  last_error_code  varchar(32)
+  created_at       datetime [not null, note: '30일 뒤 정리']
+  completed_at     datetime
+
+  indexes {
+    (status, next_attempt_at) [name: 'idx_due']
+    (user_id, created_at)     [name: 'idx_user_created']
+  }
+}
+
+Table webhook_notified_repos {
+  user_id     int [not null]
+  github_id   bigint [not null]
+  notified_at datetime [not null]
+
+  indexes {
+    (user_id, github_id) [pk]
+  }
+}
+
 // 공개 풀은 사용자 테이블과 관계없이 유지된다.
 Ref: public_repo_snapshots.repo_id > public_repos.id [delete: cascade]
 Ref: public_feed_repos.feed_id > public_feeds.id [delete: cascade]
 Ref: public_feed_repos.repo_id > public_repos.id [delete: cascade]
 Ref: public_rank_history.feed_id > public_feeds.id [delete: cascade]
 Ref: public_rank_history.repo_id > public_repos.id [delete: cascade]
+Ref: webhook_endpoints.user_id > users.id [delete: cascade]
+Ref: webhook_deliveries.user_id > users.id [delete: cascade]
+Ref: webhook_notified_repos.user_id > users.id [delete: cascade]

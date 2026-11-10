@@ -27,6 +27,14 @@ import type {
   BillingSubscription,
   CheckoutResult,
   PortalResult,
+  WebhookDelivery,
+  WebhookEndpoint,
+  WebhookEndpointResult,
+  WebhookFormat,
+  WebhookSaveResult,
+  WebhookSecretResult,
+  WebhookSettings,
+  WebhookTestResult,
 } from '../types';
 
 type MockRepo = Repo & { note: string | null; first_seen_at: string };
@@ -127,6 +135,19 @@ export async function mockFetch<T>(
   }
   if (path === '/billing/checkout' && m === 'POST') return createMockCheckout() as T;
   if (path === '/billing/portal' && m === 'POST') return mockPortal() as T;
+
+  if (path.startsWith('/webhook')) {
+    syncMockWebhookParam();
+    if (webhookSlow && m !== 'GET') await delay(2500);
+    if (path === '/webhook') {
+      if (m === 'GET') return (webhookLoadStalls ? new Promise<T>(() => {}) : webhookSettings()) as T;
+      if (m === 'PUT') return saveMockWebhook(body) as T;
+      if (m === 'PATCH') return toggleMockWebhook(body) as T;
+      if (m === 'DELETE') return deleteMockWebhook() as T;
+    }
+    if (path === '/webhook/secret' && m === 'POST') return rotateMockWebhookSecret() as T;
+    if (path === '/webhook/test' && m === 'POST') return testMockWebhook() as T;
+  }
 
   if (path === '/queries' && m === 'GET') return listQueries() as T;
   if (path === '/queries' && m === 'POST') return createQuery(body) as T;
@@ -276,6 +297,147 @@ function createMockCheckout(): CheckoutResult {
 function mockPortal(): PortalResult {
   if (!mockSubscription()?.has_customer) throw new ApiError('NO_SUBSCRIPTION', 404);
   return { portal_url: `${window.location.origin}/account/billing` };
+}
+
+// ── webhook ─────────────────────────────────────────────────────────────────
+// 목 전용 상태 전환: ?mockWebhook=none|active|disabled|auto_disabled|error|loading|slow
+// (error: 불러오기 실패, loading: 불러오기가 끝나지 않음, slow: 사용 중 상태에서 저장·테스트가 2.5초 걸림).
+// 주소에 "fail"이 들어 있으면 테스트 발신이 실패한다. URL 파라미터는 처음 보였을 때만 적용한다.
+const MOCK_WEBHOOK_STATES = ['none', 'active', 'disabled', 'auto_disabled', 'error', 'loading', 'slow'] as const;
+type MockWebhookState = (typeof MOCK_WEBHOOK_STATES)[number];
+
+let webhookEndpoint: WebhookEndpoint | null = null;
+let webhookDeliveries: WebhookDelivery[] = [];
+let webhookLoadFails = false;
+let webhookLoadStalls = false;
+let webhookSlow = false;
+let webhookFailsTest = false;
+let appliedWebhookParam: string | null = null;
+let webhookSeq = 0;
+
+function mockSecret(): string {
+  return Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('');
+}
+
+function mockDelivery(event: WebhookDelivery['event'], minutesAgo: number, extra: Partial<WebhookDelivery> = {}): WebhookDelivery {
+  webhookSeq += 1;
+  const createdAt = isoAgo(minutesAgo);
+  return {
+    id: `00000000-0000-4000-8000-${String(webhookSeq).padStart(12, '0')}`,
+    event,
+    status: 'success',
+    attempts: 1,
+    status_code: 204,
+    error_code: null,
+    created_at: createdAt,
+    completed_at: createdAt,
+    ...extra,
+  };
+}
+
+function mockEndpoint(url: URL, enabled = true, autoDisabled = false): WebhookEndpoint {
+  const host = url.hostname.toLowerCase();
+  const format: WebhookFormat = host === 'discord.com' ? 'discord' : host === 'hooks.slack.com' ? 'slack' : 'generic';
+  const rest = `${url.pathname}${url.search}`;
+  const now = new Date().toISOString();
+  return {
+    url_hint: `${url.protocol}//${url.host}/${rest.length > 5 ? `…${rest.slice(-4)}` : rest.replace(/^\//, '')}`,
+    format,
+    enabled,
+    auto_disabled: autoDisabled,
+    created_at: webhookEndpoint?.created_at ?? now,
+    updated_at: now,
+  };
+}
+
+function syncMockWebhookParam() {
+  const param = new URLSearchParams(window.location.search).get('mockWebhook');
+  if (param === appliedWebhookParam || !MOCK_WEBHOOK_STATES.includes(param as MockWebhookState)) return;
+  appliedWebhookParam = param;
+  const state = param as MockWebhookState;
+  webhookLoadFails = state === 'error';
+  webhookLoadStalls = state === 'loading';
+  webhookSlow = state === 'slow';
+  if (state === 'none' || state === 'error' || state === 'loading') {
+    webhookEndpoint = null;
+    webhookDeliveries = [];
+    return;
+  }
+  webhookEndpoint = mockEndpoint(new URL('https://hooks.example.com/trendar/in-9f2c'), state === 'active' || state === 'slow', state === 'auto_disabled');
+  webhookDeliveries = state === 'auto_disabled'
+    ? [
+        mockDelivery('rising.new', 4, { status: 'failed', attempts: 4, status_code: null, error_code: 'DISABLED' }),
+        mockDelivery('rising.new', 190, { status: 'failed', attempts: 5, status_code: 502, error_code: 'HTTP_502' }),
+        mockDelivery('rising.new', 550, { status: 'failed', attempts: 5, status_code: null, error_code: 'TIMEOUT' }),
+        mockDelivery('rising.new', 910, { status: 'failed', attempts: 5, status_code: null, error_code: 'CONNECT' }),
+        mockDelivery('ping', 2900),
+      ]
+    : [
+        mockDelivery('rising.new', 35),
+        mockDelivery('rising.new', 395, { status: 'pending', attempts: 2, status_code: 503, error_code: 'HTTP_503', completed_at: null }),
+        mockDelivery('rising.new', 760),
+        mockDelivery('ping', 1500),
+      ];
+}
+
+function webhookSettings(): WebhookSettings {
+  if (webhookLoadFails) throw new ApiError('INTERNAL_ERROR', 500);
+  return { endpoint: webhookEndpoint, deliveries: webhookDeliveries };
+}
+
+function requireMockWebhook(): WebhookEndpoint {
+  if (!webhookEndpoint) throw new ApiError('NOT_FOUND', 404);
+  return webhookEndpoint;
+}
+
+function saveMockWebhook(body: unknown): WebhookSaveResult {
+  const raw = (body as { url?: unknown } | undefined)?.url;
+  if (typeof raw !== 'string' || raw.trim() === '' || raw.length > 2048) throw new ApiError('VALIDATION_ERROR', 400);
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    throw new ApiError('WEBHOOK_URL_INVALID', 400);
+  }
+  if (url.protocol !== 'https:' || url.username || url.password) throw new ApiError('WEBHOOK_URL_INVALID', 400);
+  if (/^(?:localhost|127\.|10\.|192\.168\.|169\.254\.|\[::1\])/.test(url.host)) throw new ApiError('WEBHOOK_URL_BLOCKED', 400);
+  const created = webhookEndpoint === null;
+  webhookEndpoint = mockEndpoint(url);
+  webhookFailsTest = raw.includes('fail');
+  return created ? { endpoint: webhookEndpoint, secret: mockSecret() } : { endpoint: webhookEndpoint };
+}
+
+function toggleMockWebhook(body: unknown): WebhookEndpointResult {
+  const enabled = (body as { enabled?: unknown } | undefined)?.enabled;
+  if (typeof enabled !== 'boolean') throw new ApiError('VALIDATION_ERROR', 400);
+  webhookEndpoint = { ...requireMockWebhook(), enabled, auto_disabled: false, updated_at: new Date().toISOString() };
+  if (!enabled) {
+    webhookDeliveries = webhookDeliveries.map((item) =>
+      item.status === 'pending' ? { ...item, status: 'failed', error_code: 'DISABLED', status_code: null, completed_at: new Date().toISOString() } : item,
+    );
+  }
+  return { endpoint: webhookEndpoint };
+}
+
+function rotateMockWebhookSecret(): WebhookSecretResult {
+  requireMockWebhook();
+  return { secret: mockSecret() };
+}
+
+function testMockWebhook(): WebhookTestResult {
+  requireMockWebhook();
+  const delivery = webhookFailsTest
+    ? mockDelivery('ping', 0, { status: 'failed', status_code: 500, error_code: 'HTTP_500' })
+    : mockDelivery('ping', 0);
+  webhookDeliveries = [delivery, ...webhookDeliveries].slice(0, 10);
+  return { delivery };
+}
+
+function deleteMockWebhook(): DeletedResult {
+  requireMockWebhook();
+  webhookEndpoint = null;
+  webhookDeliveries = [];
+  return { deleted: true };
 }
 
 let billingStalled = false;

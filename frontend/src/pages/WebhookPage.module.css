@@ -1,0 +1,261 @@
+/* WebhookPage.module.css — 알림 웹훅 설정 화면. 요금제·구독 화면(AccountBillingPage)과 같은 패널·배너 규칙을 쓴다. */
+
+/* 한국어 문장이 낱말 중간에서 끊기지 않게 한다. 긴 URL·키는 anywhere로 넘침을 막는다. */
+.root {
+  word-break: keep-all;
+  overflow-wrap: anywhere;
+}
+.nowrap { white-space: nowrap; }
+
+/* global.css(.panel, .panel__head)가 모듈 CSS 뒤에 로드되므로 겹치는 속성은 복합 선택자로 지정한다 */
+:global(.panel).mainPanel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 20px;
+}
+.head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+.heading {
+  margin: 6px 0 0;
+  font-family: var(--mono);
+  font-size: 24px;
+  font-weight: 500;
+  line-height: 1.15;
+  letter-spacing: -0.4px;
+}
+.lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.6;
+}
+.summary {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13.5px;
+  line-height: 1.6;
+}
+
+.current {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+}
+.currentUrl {
+  min-width: 0;
+  font-family: var(--mono);
+  font-size: 13px;
+  word-break: normal;
+}
+
+/* 넓은 화면: 입력과 버튼이 한 줄, 그 아래 안내·오류. 좁은 화면: 입력 → 안내·오류 → 버튼. */
+.form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'label label'
+    'input submit'
+    'note note';
+  gap: 6px 10px;
+}
+.form :global(.label) { grid-area: label; }
+:global(.input).urlInput {
+  grid-area: input;
+  min-width: 0;
+  font-family: var(--mono);
+  padding: 9px 11px;
+}
+.submit { grid-area: submit; }
+.hint,
+.fieldError {
+  grid-area: note;
+  margin: 0;
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+.hint { color: var(--faint); }
+.fieldError { color: var(--danger); }
+:global(.input).urlInput[aria-invalid='true'] { border-color: var(--danger); }
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+/* 되돌릴 수 없는 삭제는 다른 동작과 떨어뜨려 오른쪽 끝에 둔다 */
+.deleteButton { margin-left: auto; }
+
+.banner {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 13px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface);
+  font-size: 13px;
+  line-height: 1.55;
+}
+.bannerIcon { font-family: var(--mono); flex: none; color: var(--muted); }
+.bannerAccent { border-color: var(--accent-dim); background: var(--accent-soft); }
+.bannerDanger { border-color: rgba(224, 85, 107, 0.45); background: var(--danger-soft); }
+.bannerDanger .bannerIcon { color: var(--danger); }
+.iconAccent { color: var(--accent); }
+
+/* global.css 의 .pill 보다 우선하도록 특이도를 올린다 */
+:global(.pill).pillDanger { border-color: rgba(224, 85, 107, 0.45); color: var(--danger); background: var(--danger-soft); }
+:global(.pill).pillWarn { border-color: rgba(224, 164, 88, 0.45); color: var(--down); background: rgba(224, 164, 88, 0.1); }
+
+:global(.panel).secretPanel {
+  border-color: var(--accent-dim);
+  box-shadow: var(--glow-soft);
+}
+.secretValue {
+  display: block;
+  padding: 11px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 13px;
+  line-height: 1.6;
+  word-break: break-all;
+  user-select: all;
+}
+.secretNote {
+  margin: 10px 0 0;
+  color: var(--muted);
+  font-size: 12.5px;
+  line-height: 1.55;
+}
+
+:global(.panel__head).tableHead {
+  margin-bottom: 0;
+  padding: 14px var(--pad) 10px;
+}
+.tableWrap { overflow-x: auto; }
+.deliveryTable { min-width: 520px; }
+.response { color: var(--muted); }
+.attempts { text-align: right; }
+/* 넓은 화면은 숫자만, 좁은 화면은 열 제목이 없으므로 "시도 n회"로 보여 준다 */
+.attemptsText { display: none; }
+
+.guide {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 0;
+}
+.guideRow {
+  display: grid;
+  grid-template-columns: 190px minmax(0, 1fr);
+  gap: 4px 16px;
+  align-items: baseline;
+}
+.guideName {
+  font-family: var(--mono);
+  font-size: 12.5px;
+  color: var(--accent);
+  word-break: normal;
+}
+.guideDesc {
+  margin: 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.bodyExample {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 16px;
+}
+.code {
+  margin: 0;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-family: var(--mono);
+  font-size: 12.5px;
+  line-height: 1.6;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
+  overflow-x: auto;
+}
+.guideNote {
+  margin: 14px 0 0;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.guideFoot {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--faint);
+  font-size: 12.5px;
+  line-height: 1.6;
+}
+
+@media (max-width: 560px) {
+  :global(.panel).mainPanel { padding: 16px; }
+  .heading { font-size: 21px; }
+  .form {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'label'
+      'input'
+      'note'
+      'submit';
+  }
+  .submit { justify-content: center; margin-top: 4px; }
+  .actions :global(.btn) { flex: 1 1 calc(50% - 5px); justify-content: center; }
+  .deleteButton { margin-left: 0; }
+  .guideRow { grid-template-columns: 1fr; }
+  /* 좁은 화면에서는 표를 두 줄짜리 행으로 바꿔 가로 스크롤 없이 다섯 정보를 모두 보여 준다.
+     1줄: 시각 · 결과, 2줄: 이벤트 · 응답 · 시도 */
+  :global(.table).deliveryTable { min-width: 0; display: block; }
+  .deliveryTable thead {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .deliveryTable tbody { display: block; }
+  .deliveryTable tr {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'time result'
+      'event response'
+      'event attempts';
+    gap: 4px 12px;
+    padding: 11px 14px;
+    border-bottom: 1px solid var(--line);
+  }
+  .deliveryTable tbody tr:last-child { border-bottom: none; }
+  :global(.table).deliveryTable td {
+    display: block;
+    padding: 0;
+    border-bottom: none;
+  }
+  .deliveryTable td:nth-child(1) { grid-area: time; font-size: 12px; color: var(--muted); }
+  .deliveryTable td:nth-child(2) { grid-area: event; }
+  .deliveryTable td:nth-child(3) { grid-area: result; justify-self: end; }
+  .deliveryTable td:nth-child(4) { grid-area: response; justify-self: end; text-align: right; }
+  .deliveryTable td:nth-child(5) { grid-area: attempts; justify-self: end; font-size: 12px; color: var(--faint); }
+  .attemptsNumber { display: none; }
+  .attemptsText { display: inline; }
+}

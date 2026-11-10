@@ -12,6 +12,7 @@ import { trendWindowDays, trendMinStars, freshWindowDays, freshMinStars, searchI
 import { createPacer } from './public-extract.js';
 import { createReadmeScanner } from '../services/readme-scan.js';
 import * as securityModel from '../models/security.model.js';
+import { notifyRising } from '../services/webhook-rising.js';
 
 const MIN_STARS = Number(process.env.ETL_MIN_STARS) || 0;
 const TOKEN_INVALID_MESSAGE = 'GitHub 연결이 유효하지 않습니다. 다시 로그인해 주세요.';
@@ -66,6 +67,8 @@ export function createEtlRunner(deps) {
     // 토큰별 Search API 30회/분 한도 보호. 실행(사용자)마다 새 pacer를 만든다. 미주입 시 대기 없음(테스트).
     makePacer = () => ({ pace: async () => {} }),
     scanRepos,
+    // 수집이 끝난 뒤 급상승 새 진입 알림을 대기열에 넣는다. 미주입 시 아무것도 하지 않는다.
+    notifyRising,
   } = deps;
 
   const running = new Set();
@@ -126,7 +129,10 @@ export function createEtlRunner(deps) {
               await insertSnapshot(repoId, repo);
               await updateRepoDelta(repoId, delta);
               seen.add(repo.github_id);
-              scanTargets.push({ github_id: item.id, owner: repo.owner, name: repo.name, pushed_at: item.pushed_at ?? null });
+              scanTargets.push({
+                github_id: item.id, owner: repo.owner, name: repo.name, pushed_at: item.pushed_at ?? null,
+                language: item.language ?? null, forks: item.forks_count ?? null, size: item.size ?? null,
+              });
               result.repos_upserted++;
               result.snapshots_inserted++;
             }
@@ -157,6 +163,14 @@ export function createEtlRunner(deps) {
         ? `수집 조건 ${result.queries_processed}개를 처리하는 중 일부 항목을 수집하지 못했습니다.`
         : `수집 조건 ${result.queries_processed}개에서 프로젝트 ${result.repos_upserted}개를 수집했습니다.`;
       await users.updateEtlResult(userId, { status, message });
+      // 알림 오류는 수집 결과·상태를 바꾸지 않는다.
+      if (notifyRising) {
+        try {
+          await notifyRising(userId);
+        } catch (e) {
+          console.error(`[etl] user#${userId} webhook notify failed: ${e?.code ?? e?.status ?? e?.name}`);
+        }
+      }
       return result;
     } finally {
       running.delete(userId);
@@ -194,6 +208,7 @@ export const { runPipelineForUser, runPipelineAllUsers, isRunning } = createEtlR
   queryFn: defaultQueryFn,
   makePacer: () => createPacer({ intervalMs: searchIntervalMs() }),
   scanRepos: createReadmeScanner({ model: securityModel }).scanRepos,
+  notifyRising,
 });
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {

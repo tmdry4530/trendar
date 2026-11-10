@@ -43,3 +43,55 @@ export interface RisingRepo {
   /** 최신 스냅샷 시각 (ISO 8601) */
   captured_at?: string | null;
 }
+
+/** 급상승 알림 웹훅 본문 형식. 수신 URL의 호스트로 정해진다 */
+export type WebhookFormat = 'generic' | 'discord' | 'slack';
+
+/** GET·PUT·PATCH /api/webhook 의 endpoint. 전체 URL과 서명 키는 응답에 없다 */
+export interface WebhookEndpoint {
+  /** 호스트와 끝 4자만 남긴 주소 */
+  url_hint: string;
+  format: WebhookFormat;
+  enabled: boolean;
+  /** 알림 3건이 연속으로 최종 실패해 서버가 끈 상태 */
+  auto_disabled: boolean;
+  /** ISO 8601 */
+  created_at: string;
+  updated_at: string;
+}
+
+/** 발신 기록 한 건 (최근 10건) */
+export interface WebhookDelivery {
+  /** X-Trendar-Delivery 헤더 값 */
+  id: string;
+  event: 'rising.new' | 'ping';
+  status: 'pending' | 'success' | 'failed';
+  attempts: number;
+  status_code: number | null;
+  /** HTTP_<상태> | TIMEOUT | DNS | CONNECT | TLS | NETWORK | BLOCKED_TARGET | DISABLED | CONFIG */
+  error_code: string | null;
+  created_at: string;
+  completed_at: string | null;
+}
+
+/** GET /api/webhook */
+export interface WebhookSettings {
+  endpoint: WebhookEndpoint | null;
+  deliveries: WebhookDelivery[];
+}
+
+/** rising.new 본문의 data.repos 항목 (일반 형식) */
+export interface WebhookRisingRepo {
+  github_id: number;
+  full_name: string;
+  html_url: string | null;
+  description: string | null;
+  language: string | null;
+  stars: number;
+  rate_24h: number;
+  growth_rate_24h: number | null;
+  age_days: number;
+  rank: number;
+  /** 24시간 전 기록이 없어 짧은 구간을 하루로 환산한 값이면 true */
+  estimated: boolean;
+}

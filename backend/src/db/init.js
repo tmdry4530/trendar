@@ -167,6 +167,51 @@ async function migratePublicSchema() {
   )`);
 }
 
+// 급상승 알림 웹훅: 사용자별 수신 URL, 발신 대기열(outbox), 보냄 기록. 사용자 삭제 시 함께 지워진다.
+async function migrateWebhookSchema() {
+  await pool.query(`CREATE TABLE IF NOT EXISTS webhook_endpoints (
+    user_id INT NOT NULL PRIMARY KEY,
+    url_enc TEXT NOT NULL,
+    secret_enc TEXT NOT NULL,
+    url_hint VARCHAR(300) NOT NULL,
+    format ENUM('generic','discord','slack') NOT NULL,
+    enabled BOOLEAN NOT NULL DEFAULT TRUE,
+    auto_disabled BOOLEAN NOT NULL DEFAULT FALSE,
+    consecutive_failures INT NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    CONSTRAINT fk_whe_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS webhook_deliveries (
+    id BIGINT AUTO_INCREMENT PRIMARY KEY,
+    user_id INT NOT NULL,
+    delivery_id CHAR(36) NOT NULL,
+    event VARCHAR(32) NOT NULL,
+    payload MEDIUMTEXT NOT NULL,
+    status ENUM('pending','success','failed') NOT NULL DEFAULT 'pending',
+    attempts TINYINT UNSIGNED NOT NULL DEFAULT 0,
+    max_attempts TINYINT UNSIGNED NOT NULL DEFAULT 5,
+    next_attempt_at DATETIME NULL,
+    last_status_code SMALLINT UNSIGNED NULL,
+    last_error_code VARCHAR(32) NULL,
+    created_at DATETIME NOT NULL,
+    completed_at DATETIME NULL,
+    UNIQUE KEY uq_delivery (delivery_id),
+    KEY idx_due (status, next_attempt_at),
+    KEY idx_user_created (user_id, created_at),
+    CONSTRAINT fk_whd_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+
+  await pool.query(`CREATE TABLE IF NOT EXISTS webhook_notified_repos (
+    user_id INT NOT NULL,
+    github_id BIGINT NOT NULL,
+    notified_at DATETIME NOT NULL,
+    PRIMARY KEY (user_id, github_id),
+    CONSTRAINT fk_whn_user FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+  )`);
+}
+
 export async function initDb() {
   await dropLegacySchema();
   await migrateUsersColumns();
@@ -255,4 +300,5 @@ export async function initDb() {
   )`);
 
   await migratePublicSchema();
+  await migrateWebhookSchema();
 }

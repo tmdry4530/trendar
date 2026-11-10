@@ -7,6 +7,7 @@ import ReposPage from './pages/ReposPage';
 import RepoDetailPage from './pages/RepoDetailPage';
 import LoginPage from './pages/LoginPage';
 import AccountBillingPage from './pages/AccountBillingPage';
+import WebhookPage from './pages/WebhookPage';
 import AdminPage from './pages/AdminPage';
 import { useAuth } from './auth/AuthContext';
 import { LoadingState } from './components/States';
@@ -56,6 +57,7 @@ export default function App() {
           <Route path="/repos" element={<ReposPage />} />
           <Route path="/repos/:id" element={<RepoDetailPage />} />
           <Route path="/account/billing" element={<AccountBillingPage />} />
+          <Route path="/account/webhook" element={<WebhookPage />} />
           <Route path="/admin" element={<AdminPage />} />
           <Route path="/pricing" element={<PricingPage />} />
           <Route path="/terms" element={<TermsPage />} />

@@ -3,6 +3,7 @@ import cron from 'node-cron';
 import app from './app.js';
 import { runPipelineAllUsers } from './etl/pipeline.js';
 import { runPublicCollection } from './etl/public-pipeline.js';
+import { dispatcher as webhookDispatcher } from './services/webhook-delivery.js';
 import { initDb } from './db/init.js';
 
 const PORT = process.env.PORT || 4000;
@@ -47,4 +48,15 @@ cron.schedule(schedule, () => {
   runPublicCollection()
     .then((r) => console.log('[cron] public ETL done', r))
     .catch((e) => console.error('[cron] public ETL failed', e.status ?? e.code ?? e.message));
+});
+
+// 급상승 알림 웹훅: 대기 중인 발신과 재시도를 1분마다 처리하고, 30일 지난 발신 기록을 하루 한 번 지운다.
+cron.schedule('* * * * *', () => {
+  webhookDispatcher.dispatchDue()
+    .catch((e) => console.error('[cron] webhook dispatch failed', e.code ?? e.name));
+});
+cron.schedule('17 3 * * *', () => {
+  webhookDispatcher.prune()
+    .then((n) => console.log('[cron] webhook deliveries pruned', n))
+    .catch((e) => console.error('[cron] webhook prune failed', e.code ?? e.name));
 });
