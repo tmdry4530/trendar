@@ -25,8 +25,12 @@ function logFailure(log, key, error, token) {
   log.error(`[public-etl] ${key} status=${safeLogValue(error?.status ?? error?.code, token)} name=${safeLogValue(error?.name, token)} message=${safeLogValue(error?.message, token)}`);
 }
 
+// 판정에 넘기는 메타는 검색 응답에 이미 있는 값만 쓴다(추가 API 호출 없음).
 function scanTarget(item) {
-  return { github_id: item.id, owner: item.owner?.login ?? item.full_name?.split('/')[0], name: item.name, pushed_at: item.pushed_at ?? null };
+  return {
+    github_id: item.id, owner: item.owner?.login ?? item.full_name?.split('/')[0], name: item.name, pushed_at: item.pushed_at ?? null,
+    language: item.language ?? null, forks: item.forks_count ?? null, size: item.size ?? null,
+  };
 }
 
 export function createPublicCollector({

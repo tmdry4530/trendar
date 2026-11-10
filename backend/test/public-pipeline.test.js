@@ -361,7 +361,7 @@ test('README 판정: 수집한 저장소를 github_id당 한 번, 순위 기록 
   const scans = [];
   const { runner, calls } = fixture({
     feeds: FEEDS.slice(0, 2),
-    search: () => [rawItem(7, { pushed_at: '2026-10-18T00:00:00Z' }), rawItem(8)],
+    search: () => [rawItem(7, { pushed_at: '2026-10-18T00:00:00Z', language: null, forks_count: 0, size: 1 }), rawItem(8)],
     candidates: () => { order.push('rank'); return []; },
     deps: { scanRepos: async (octokit, targets) => { order.push('scan'); scans.push({ octokit, targets }); } },
   });
@@ -369,8 +369,8 @@ test('README 판정: 수집한 저장소를 github_id당 한 번, 순위 기록 
   assert.equal(scans.length, 1);
   assert.ok(scans[0].octokit.rest.search, '수집과 같은 octokit');
   assert.deepEqual(scans[0].targets, [
-    { github_id: 7, owner: 'octo', name: 'repo-7', pushed_at: '2026-10-18T00:00:00Z' },
-    { github_id: 8, owner: 'octo', name: 'repo-8', pushed_at: null },
+    { github_id: 7, owner: 'octo', name: 'repo-7', pushed_at: '2026-10-18T00:00:00Z', language: null, forks: 0, size: 1 },
+    { github_id: 8, owner: 'octo', name: 'repo-8', pushed_at: null, language: 'Python', forks: 10, size: null },
   ]);
   assert.deepEqual(order, ['scan', 'rank', 'rank']);
   assert.equal(calls.searches.length, 2);
