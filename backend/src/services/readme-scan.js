@@ -1,5 +1,8 @@
-// README 텍스트와 검색 응답 메타만 읽어 판정한다. 링크·첨부·코드는 내려받거나 실행하지 않는다.
-export const RULE_VERSION = 2;
+import { createHash } from 'node:crypto';
+
+// README 텍스트, 검색 응답 메타, 소유자 계정 생성일만 읽어 판정한다. 링크·첨부·코드는 내려받거나 실행하지 않는다.
+export const RULE_VERSION = 3;
+export const NEW_ACCOUNT_DAYS = 90;
 
 const MAX_README_BYTES = 512 * 1024;
 const MAX_EVIDENCE = 500;
@@ -465,6 +468,124 @@ export function classifyReadme(text, meta) {
   return { verdict: 'clean', evidence: null };
 }
 
+// 배포형 캠페인 판정(D-014·D-015)에 쓰는 README 정보. 판정 자체는 저장된 판정 전체를 보는 군집 재계산과 스캐너의 미끼 링크 규칙이 한다.
+const ARCHIVE_EXT = String.raw`(?:zip|rar|7z|exe|msi|scr|dmg|pkg|apk)`;
+const ARCHIVE_PATH = new RegExp(String.raw`\.${ARCHIVE_EXT}$`, 'i');
+// 확장자 뒤에 다른 확장자가 붙은 이름(tool.exe.manifest, a.zip.sha256)은 압축·실행 파일이 아니다.
+const ARCHIVE_NAME = new RegExp(String.raw`[\w.-]{1,200}\.${ARCHIVE_EXT}(?![\w.-])`, 'i');
+const RELEASES = /\breleases\b/i;
+// 호스트·경로는 표준 URL 파서(URL.parse, 실패 시 null)로 읽는다. 정규식으로 자르면
+// `https://dropbox.com@evil.example/…`의 사용자 정보를 호스트로 오인하고, 잘못된 포트·percent-encoding·IDNA 정규화가 어긋난다.
+const URL_TOKEN = /https?:\/\/[^\s"'<>()[\]`]{1,2000}/gi;
+const URL_TRAILING_PUNCT = new Set(['.', ',', ';', ':', '!', '?', '*', '_', '~']);
+// 단축 URL은 대상을 알 수 없어 넣지 않는다(덜 숨김).
+const FILEHOST_HOSTS = [
+  'dropbox.com', 'dropboxusercontent.com', 'mega.nz', 'mega.co.nz', 'mediafire.com', 'gofile.io', 'pixeldrain.com',
+  'drive.google.com', '1drv.ms', 'onedrive.live.com', 'sendspace.com', 'catbox.moe', 'transfer.sh', 'anonfiles.com',
+  'krakenfiles.com', 'workupload.com', 'qiwi.gg',
+];
+const HEADING = /^ {0,3}(#{1,6})[ \t]+/;
+// 끝 앵커 없이 펜스 문자만 잡는다. 나머지는 slice로 본다(단독 CR·U+2028 뒤에서 역추적하지 않게).
+const FENCE_MARK = /^ {0,3}(`{3,}|~{3,})/;
+const MIN_TEXT_KEY_CHARS = 300;
+const MIN_SKELETON_HEADINGS = 8;
+const MAX_LURE_URL = 200;
+const HTTP_HINT = /http/i;
+const DOWNLOAD_WORD = /\bdownload/i;
+
+function isFilehost(host) {
+  const value = host.toLowerCase();
+  return FILEHOST_HOSTS.some((domain) => value === domain || value.endsWith(`.${domain}`));
+}
+
+function withoutTrailingPunct(value) {
+  let end = value.length;
+  while (end > 0 && URL_TRAILING_PUNCT.has(value[end - 1])) end--;
+  return value.slice(0, end);
+}
+
+function sha256(value) {
+  return createHash('sha256').update(value).digest('hex');
+}
+
+// 소문자로 바꾸고 소유자·저장소 이름을 지운 뒤 글자·숫자가 아닌 연속 문자를 공백 하나로 줄인다.
+function normalizeText(text, names) {
+  let value = text.toLowerCase();
+  for (const name of names) value = value.split(name).join(' ');
+  return value.replace(/[^\p{L}\p{N}]+/gu, ' ').trim();
+}
+
+function strippedNames(repo) {
+  const names = new Set();
+  for (const raw of [repo?.owner, repo?.name]) {
+    if (typeof raw !== 'string') continue;
+    const lower = raw.toLowerCase();
+    for (const variant of [lower, lower.replace(/[-_]/g, ' ')]) if (variant.trim()) names.add(variant);
+  }
+  // 긴 이름부터 지워야 짧은 이름이 긴 이름의 일부만 지우는 일이 없다.
+  return [...names].sort((a, b) => b.length - a.length);
+}
+
+/**
+ * @param {string | null} text
+ * @param {{ owner?: string, name?: string }} repo
+ * @returns {{ textKey: string | null, skeletonKey: string | null, lure: boolean, archiveFilehostUrl: string | null }}
+ */
+export function readmeTraits(text, repo) {
+  if (typeof text !== 'string' || text === '') return { textKey: null, skeletonKey: null, lure: false, archiveFilehostUrl: null };
+  const names = strippedNames(repo);
+  const body = normalizeText(text, names).replace(/ /g, '');
+  // 자기 GitHub Pages 다운로드 페이지로 유도하는 캠페인(D-016). 호스트가 정확히 <owner>.github.io일 때만 센다.
+  const ownPagesHost = typeof repo?.owner === 'string' && repo.owner ? `${repo.owner.toLowerCase()}.github.io` : null;
+  const headings = [];
+  // 열린 코드펜스의 문자와 길이. 같은 문자로 같거나 더 긴 펜스만 닫는다(````markdown 안의 ``` 는 닫지 않는다).
+  let fence = null;
+  let lure = false;
+  let ownPages = false;
+  let archiveFilehostUrl = null;
+  for (const line of text.split(/\r?\n/)) {
+    const mark = FENCE_MARK.exec(line);
+    if (mark) {
+      if (!fence) {
+        fence = mark[1];
+        continue;
+      }
+      if (mark[1][0] === fence[0] && mark[1].length >= fence.length && line.slice(mark[0].length).trim() === '') {
+        fence = null;
+        continue;
+      }
+    }
+    if (!fence) {
+      const heading = HEADING.exec(line);
+      if (heading) headings.push(`${heading[1]}${normalizeText(line.slice(heading[0].length), names).replace(/[^a-z ]+/g, '').trim()}`);
+    }
+    const archiveNamed = ARCHIVE_NAME.test(line);
+    if (archiveNamed && RELEASES.test(line)) lure = true;
+    if (!HTTP_HINT.test(line)) continue;
+    for (const match of line.matchAll(URL_TOKEN)) {
+      const raw = withoutTrailingPunct(match[0]);
+      const url = URL.parse(raw);
+      if (!url) continue;
+      const host = url.hostname.toLowerCase();
+      const path = url.pathname;
+      if (!host) continue;
+      const archivePath = ARCHIVE_PATH.test(path);
+      const filehost = isFilehost(host);
+      if (archivePath || filehost) lure = true;
+      if (filehost && !archiveFilehostUrl && (archivePath || archiveNamed)) archiveFilehostUrl = raw.slice(0, MAX_LURE_URL);
+      if (ownPagesHost && host === ownPagesHost) ownPages = true;
+    }
+  }
+  if (ownPages && DOWNLOAD_WORD.test(text)) lure = true;
+  const skeleton = headings.slice(1).filter((heading) => heading.replace(/^#+/, '') !== '');
+  return {
+    textKey: body.length >= MIN_TEXT_KEY_CHARS ? sha256(body) : null,
+    skeletonKey: skeleton.length >= MIN_SKELETON_HEADINGS ? sha256(skeleton.join('|')) : null,
+    lure,
+    archiveFilehostUrl,
+  };
+}
+
 export async function fetchReadme(octokit, owner, name) {
   try {
     const { data } = await octokit.rest.repos.getReadme({ owner, repo: name, mediaType: { format: 'raw' } });
@@ -474,6 +595,16 @@ export async function fetchReadme(octokit, owner, name) {
     if (error?.status === 404) return null;
     throw error;
   }
+}
+
+// 미끼 링크 규칙(D-015)에서만 부른다. 생성일을 읽을 수 없으면 조회 실패로 다룬다.
+export async function fetchOwnerCreatedAt(octokit, login) {
+  const { data } = await octokit.rest.users.getByUsername({ username: login });
+  const createdAt = typeof data?.created_at === 'string' ? new Date(data.created_at) : null;
+  if (!createdAt || !Number.isFinite(createdAt.getTime())) {
+    throw Object.assign(new Error('owner created_at unavailable'), { code: 'OWNER_CREATED_AT_UNAVAILABLE' });
+  }
+  return createdAt;
 }
 
 function timeOf(value) {
@@ -498,11 +629,12 @@ function isRateLimited(error) {
 
 // GitHub REST 2차 한도(분당 약 900회)를 넘지 않도록 요청 시작 간격을 둔다. 한도에 걸리면 남은 검사는 다음 수집으로 넘긴다.
 export function createReadmeScanner({
-  model, fetchReadme: fetch = fetchReadme, log = console, now = () => new Date(), concurrency = 4,
-  minIntervalMs = 100, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)), clock = Date.now,
+  model, fetchReadme: fetch = fetchReadme, fetchOwnerCreatedAt: fetchOwner = fetchOwnerCreatedAt, log = console,
+  now = () => new Date(), concurrency = 4, minIntervalMs = 100, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+  clock = Date.now,
 }) {
   async function scanRepos(octokit, repos) {
-    const result = { scanned: 0, malicious: 0, unknown: 0, skipped: 0 };
+    const result = { scanned: 0, malicious: 0, unknown: 0, skipped: 0, cluster_hidden: null };
     let nextStart = 0;
     let halted = false;
     const pace = async () => {
@@ -524,6 +656,23 @@ export function createReadmeScanner({
       else result.skipped++;
     }
 
+    // README·소유자 조회 실패: 한도에 걸린 요청도 조회 실패라 아래 R2.2 처리를 따르고, 아직 요청하지 않은 저장소만 판정 없이 다음 수집으로 넘긴다.
+    async function recordFailure(id, error) {
+      if (isRateLimited(error)) {
+        if (!halted) log.warn(`[readme-scan] rate limited status=${error.status} — 남은 검사는 다음 수집에서 재시도`);
+        halted = true;
+      } else {
+        log.warn(`[readme-scan] github_id=${id} status=${error?.status ?? error?.code ?? 'error'}`);
+      }
+      // 기존 판정은 성공한 재검사로만 바뀐다(D-008). push 시각을 갱신하지 않아 다음 수집에서 다시 시도한다.
+      if (!existing.has(id)) {
+        await model.upsertVerdict({
+          github_id: id, verdict: 'unknown', rule_version: RULE_VERSION, evidence: null, repo_pushed_at: null, scanned_at: new Date(now()),
+        });
+        result.unknown++;
+      }
+    }
+
     async function scanOne([id, repo]) {
       if (!halted) await pace();
       if (halted) {
@@ -534,26 +683,35 @@ export function createReadmeScanner({
       try {
         text = await fetch(octokit, repo.owner, repo.name);
       } catch (error) {
-        // 한도에 걸린 요청도 조회 실패라 아래 R2.2 처리를 따르고, 아직 요청하지 않은 저장소만 판정 없이 다음 수집으로 넘긴다.
-        if (isRateLimited(error)) {
-          if (!halted) log.warn(`[readme-scan] rate limited status=${error.status} — 남은 검사는 다음 수집에서 재시도`);
-          halted = true;
-        } else {
-          log.warn(`[readme-scan] github_id=${id} status=${error?.status ?? 'error'}`);
-        }
-        // 기존 판정은 성공한 재검사로만 바뀐다(D-008). push 시각을 갱신하지 않아 다음 수집에서 다시 시도한다.
-        if (!existing.has(id)) {
-          await model.upsertVerdict({
-            github_id: id, verdict: 'unknown', rule_version: RULE_VERSION, evidence: null, repo_pushed_at: null, scanned_at: new Date(now()),
-          });
-          result.unknown++;
-        }
+        await recordFailure(id, error);
         return;
       }
-      const { verdict, evidence } = classifyReadme(text, repo);
+      let { verdict, evidence } = classifyReadme(text, repo);
+      const traits = readmeTraits(text, repo);
+      // 미끼 링크 규칙(D-014·D-015): 압축·실행 파일 파일호스팅 링크 + 코드 없음 + 신생 소유자 계정.
+      if (verdict === 'clean' && traits.archiveFilehostUrl && isCodeless(repo)) {
+        if (!halted) await pace();
+        if (halted) {
+          result.skipped++;
+          return;
+        }
+        let createdAt;
+        try {
+          createdAt = await fetchOwner(octokit, repo.owner);
+        } catch (error) {
+          await recordFailure(id, error);
+          return;
+        }
+        if (new Date(now()).getTime() - createdAt.getTime() <= NEW_ACCOUNT_DAYS * 86_400_000) {
+          verdict = 'malicious';
+          evidence = `파일호스팅 링크 ${traits.archiveFilehostUrl} · 소유자 계정 생성 ${createdAt.toISOString().slice(0, 10)}`.slice(0, MAX_EVIDENCE);
+        }
+      }
       await model.upsertVerdict({
         github_id: id, verdict, rule_version: RULE_VERSION, evidence,
         repo_pushed_at: repo.pushed_at ? new Date(repo.pushed_at) : null, scanned_at: new Date(now()),
+        owner_login: typeof repo.owner === 'string' ? repo.owner.toLowerCase() : null,
+        text_key: traits.textKey, skeleton_key: traits.skeletonKey, lure: traits.lure,
       });
       result.scanned++;
       if (verdict === 'malicious') result.malicious++;
@@ -573,6 +731,12 @@ export function createReadmeScanner({
       while (next < queue.length) await scanSafely(queue[next++]);
     });
     await Promise.all(workers);
+    // 군집은 저장된 판정 전체에서 다시 계산한다(R1.5). 이번에 검사한 저장소가 없어도 다른 수집의 판정으로 군집이 생길 수 있다.
+    try {
+      result.cluster_hidden = await model.refreshClusters();
+    } catch (error) {
+      log.warn(`[readme-scan] cluster refresh=${error?.code ?? error?.name ?? 'error'}`);
+    }
     return result;
   }
 

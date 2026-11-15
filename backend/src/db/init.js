@@ -163,8 +163,33 @@ async function migratePublicSchema() {
     evidence VARCHAR(500) NULL,
     repo_pushed_at DATETIME NULL,
     scanned_at DATETIME NOT NULL,
-    KEY idx_verdict (verdict)
+    owner_login VARCHAR(100) NULL,
+    text_key CHAR(64) NULL,
+    skeleton_key CHAR(64) NULL,
+    lure TINYINT(1) NOT NULL DEFAULT 0,
+    cluster_hidden TINYINT(1) NOT NULL DEFAULT 0,
+    KEY idx_verdict (verdict),
+    KEY idx_text_key (text_key),
+    KEY idx_skeleton_key (skeleton_key)
   )`);
+  await migrateVerdictColumns();
+}
+
+// 배포형 캠페인 군집(D-014): 2판까지의 판정 테이블에 군집 계산 컬럼을 더한다. 기존 행은 NULL·0으로 남고 3판 재검사로 채워진다.
+async function migrateVerdictColumns() {
+  const [rows] = await pool.query(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'repo_security_verdicts' AND COLUMN_NAME = 'text_key'`
+  );
+  if (rows.length) return;
+  await pool.query(`ALTER TABLE repo_security_verdicts
+    ADD COLUMN owner_login VARCHAR(100) NULL,
+    ADD COLUMN text_key CHAR(64) NULL,
+    ADD COLUMN skeleton_key CHAR(64) NULL,
+    ADD COLUMN lure TINYINT(1) NOT NULL DEFAULT 0,
+    ADD COLUMN cluster_hidden TINYINT(1) NOT NULL DEFAULT 0,
+    ADD KEY idx_text_key (text_key),
+    ADD KEY idx_skeleton_key (skeleton_key)`);
 }
 
 // 급상승 알림 웹훅: 사용자별 수신 URL, 발신 대기열(outbox), 보냄 기록. 사용자 삭제 시 함께 지워진다.

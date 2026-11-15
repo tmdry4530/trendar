@@ -29,7 +29,7 @@ Trendar는 관심 키워드에 매칭되는 레포의 스타 수를 **6시간마
 - **멀티테넌트** — GitHub 로그인 기반. 검색어·레포·북마크가 **사용자별로 완전 격리**되고, 수집도 **각자의 OAuth 토큰**으로 실행되어 레이트리밋을 분산
 - **남용 방지** — 수동 수집에 사용자별 **일일 한도**(기본 10회, KST 자정 리셋), 조건 개수 상한
 - **공개 트렌드** — 로그인 없이 볼 수 있는 서버 렌더 페이지(`/trending`, 언어·주제별 피드, 레포 페이지, 한국어 `/ko`). 서버 전용 토큰으로 모은 공개 풀을 하루 환산 증가 속도로 랭킹하고, 링크 미리보기 PNG·README 배지·동적 sitemap을 제공 ([공개 트렌드](#공개-트렌드) 참고)
-- **악성 저장소 제외** — 수집 때 README를 읽어, 원격 스크립트 즉시 실행 지시와 백신·실시간 보호 끄기 안내가 **함께** 있는 저장소를 대시보드 급상승·성장률 상위와 공개 트렌드에서 숨긴다 ([악성 저장소 제외](#악성-저장소-제외) 참고)
+- **악성 저장소 제외** — 수집 때 README를 읽어, 원격 스크립트 즉시 실행 지시와 백신·실시간 보호 끄기 안내가 **함께** 있는 저장소, 같은 README를 여러 계정에 뿌리며 압축 파일을 받게 하는 캠페인, 신생 계정의 코드 없는 저장소가 파일호스팅 압축 파일로 유도하는 경우를 대시보드 급상승·성장률 상위와 공개 트렌드에서 숨긴다 ([악성 저장소 제외](#악성-저장소-제외) 참고)
 - **급상승 알림 웹훅** — 수집이 끝날 때 대시보드 신생 급상승(상위 8개)에 새로 들어온 저장소를, 사용자가 등록한 URL로 서명해 보낸다. Discord·Slack 수신 주소는 그 서비스가 읽는 형식으로 보낸다 ([급상승 알림 웹훅](#급상승-알림-웹훅) 참고)
 
 ---
@@ -334,19 +334,31 @@ node src/etl/public-pipeline.js    # 피드 33개 기준 Search 33회 × 2.1초 
 
 ### 악성 저장소 제외
 
-공개 수집과 사용자 수집은 처리한 저장소의 README를 GitHub API로 읽어 판정하고 `repo_security_verdicts`(github_id 기준, 대시보드·공개 풀 공유)에 남긴다. README 텍스트와 검색 응답에 이미 있는 메타(language·forks·size)만 쓰며 링크·첨부·코드는 내려받거나 실행하지 않는다. 현재 규칙은 2판(`rule_version = 2`)이다.
+공개 수집과 사용자 수집은 처리한 저장소의 README를 GitHub API로 읽어 판정하고 `repo_security_verdicts`(github_id 기준, 대시보드·공개 풀 공유)에 남긴다. README 텍스트, 검색 응답에 이미 있는 메타(language·forks·size), 아래 미끼 링크 규칙에서만 조회하는 소유자 계정 생성일을 쓰며 링크·첨부·Releases 파일은 내려받거나 실행하지 않는다. 현재 규칙은 3판(`rule_version = 3`)이다. 숨기는 근거는 세 가지다.
 
-- **malicious** — README에 아래 두 신호가 **둘 다** 있을 때만. 2026-11 공개 피드에 올라온 가짜 크랙·치트 저장소 군집(`windows-defender.cc` 스크립트 실행 + 실시간 보호 중지)이 기준 사례다.
+- **malicious — README 단독 규칙**: README에 아래 두 신호가 **둘 다** 있을 때만. 2026-11 공개 피드에 올라온 가짜 크랙·치트 저장소 군집(`windows-defender.cc` 스크립트 실행 + 실시간 보호 중지)이 기준 사례다.
   - **실행 지시**: 원격 스크립트를 받아 바로 실행하는 명령. 파이프(`irm … | iex`, `irm … | &(gcm i*x)`, `curl … | sh`), 저장 후 실행(`curl … > run.ps1 && powershell -File run.ps1`, 같은 코드블록의 다음 3줄 안에서 실행하는 경우 포함), 치환(`bash <(curl …)`, `sh -c "$(curl …)"`, `[scriptblock]::Create((irm …))`), `mshta https://…`, 그리고 `powershell -enc <base64>`를 풀었을 때 본문에 위 형태가 있는 경우.
   - **보호 해제 안내**: Windows Defender·실시간 보호·백신을 끄거나 일시 중지하라는 영어 문구와 명령(`Set-MpPreference -Disable…`, `sc stop WinDefend`, `DisableAntiSpyware` 레지스트리 값 1). 보호 대상을 일반 명사(security software·firewall 등)로만 쓴 명령형 문구는 코드 없는 저장소(language 없음, forks 0, size 100KB 이하)일 때만 인정한다. 영어가 아닌 문구는 부정·금지 표현을 가려낼 수 없어 판정에 쓰지 않는다.
-- **clean** — 둘 중 하나만 있거나 둘 다 없음. 정상 설치 안내(`irm https://get.scoop.sh | iex` 등), 백신 예외 등록 안내, SmartScreen 통과 안내, 부정문("끄지 마세요"), 스타 급증, 코드 없는 저장소라는 사실만으로는 숨기지 않는다.
-- **unknown** — 처음 검사할 때 README 조회가 실패함. 노출되고 다음 수집에서 다시 검사한다. 이미 판정이 있으면 조회 실패 시 기존 판정을 유지한다.
+- **malicious — 미끼 링크 규칙**: 실행 명령 없이 압축 파일을 받게 하는 배포형 캠페인(2026-11 `manus--ai`·`ai--manus` 등)을 위한 규칙이다. 다음 세 조건이 **모두** 맞아야 한다.
+  - README에 파일호스팅(Dropbox·MEGA·MediaFire·Google Drive·OneDrive·gofile·pixeldrain 등) 링크가 있다. 그 링크의 경로가 압축·실행 파일(zip·rar·7z·exe·msi·scr·dmg·pkg·apk)로 끝나거나, 같은 줄(링크 텍스트 포함)에 그런 파일 이름이 있어야 한다. 경로·줄에 파일 이름이 없는 링크(파일 이름 없는 MEGA 폴더 등)와 단축 URL은 해당하지 않는다.
+  - 코드 없는 저장소다.
+  - 소유자 계정이 생성된 지 90일 이내다.
+  - 소유자 계정 조회는 앞의 두 조건이 맞는 저장소에만 1번 한다. 근거에는 링크와 계정 생성일이 남는다.
+- **군집 표시(`cluster_hidden`)**: 같은 README를 여러 계정에 뿌리는 캠페인(2026-11 `IPTV_Player2.0` 70개, `blender-ai-copilot-*` 등)을 위한 표시다.
+  - 조건: 서로 다른 소유자 3명 이상이 같은 README를 쓰고, 그 README에 미끼 표시가 있으면 모두 숨긴다.
+  - 같은 README: 소유자·저장소 이름을 지우고 글자·숫자만 남긴 본문이 300자 이상이면서 같다.
+  - 거의 같은 README: 첫 제목을 뺀 Markdown 제목 순서(8개 이상)가 같다.
+  - 미끼 표시: 압축·실행 파일 링크, 파일호스팅 링크, 한 줄에 Releases와 그런 파일 이름이 함께 적힌 경우, 또는 소유자 자신의 GitHub Pages(`<소유자>.github.io`)로 링크하면서 다운로드를 안내하는 경우(2026-11 `*-desktop` 캠페인).
+  - 미끼 표시가 없는 같은 README(프레임워크 기본 README, 내려받기 유도가 없는 홍보 글)는 숨기지 않는다.
+  - 판정을 마칠 때마다 저장된 판정 전체에서 다시 계산한다. 그래서 군집이 해체되면(구성원 README가 바뀌어 재검사) 다음 수집에서 다시 보인다.
+- **clean** — 위 어느 것에도 해당하지 않음. 정상 설치 안내(`irm https://get.scoop.sh | iex` 등), 백신 예외 등록 안내, SmartScreen 통과 안내, 부정문("끄지 마세요"), 스타 급증, 코드 없는 저장소라는 사실, 압축 파일 다운로드 링크 하나만으로는 숨기지 않는다.
+- **unknown** — 처음 검사할 때 README나 (미끼 링크 규칙의) 소유자 계정 조회가 실패함. 노출되고 다음 수집에서 다시 검사한다. 이미 판정이 있으면 조회 실패 시 기존 판정을 유지한다.
 
-판정이 없거나 `unknown`이거나 저장소 `pushed_at`·규칙 버전이 바뀐 경우에만 README를 다시 읽는다. `malicious`는 대시보드 신생 급상승·성장률 상위, 공개 랜딩·피드·OG·sitemap·순위 기록에서 빠지고, 레포 페이지·레포 OG는 404, 배지는 중립으로 응답한다. 행·스냅샷은 지우지 않으므로 README가 고쳐져 재검사에서 `clean`이 되면 다음 수집 뒤(공개 페이지는 서버 캐시 최대 10분, 배지는 HTTP 캐시 최대 1시간) 다시 노출된다. 판정 근거는 운영자만 DB에서 본다.
+판정이 없거나 `unknown`이거나 저장소 `pushed_at`·규칙 버전이 바뀐 경우에만 README를 다시 읽는다. 버전 3 배포 뒤 첫 수집에서 판정된 저장소 전체를 한 번 다시 읽는다. `malicious`와 `cluster_hidden = 1`은 대시보드 신생 급상승·성장률 상위, 공개 랜딩·피드·OG·sitemap·순위 기록에서 빠지고, 레포 페이지·레포 OG는 404, 배지는 중립으로 응답한다. 행·스냅샷은 지우지 않으므로 README가 고쳐져 재검사에서 `clean`이 되거나 군집이 해체되면 다음 수집 뒤(공개 페이지는 서버 캐시 최대 10분, 배지는 HTTP 캐시 최대 1시간) 다시 노출된다. 판정 근거는 운영자만 DB에서 본다.
 
 ```sql
-SELECT github_id, verdict, rule_version, evidence, scanned_at
-FROM repo_security_verdicts WHERE verdict = 'malicious' ORDER BY scanned_at DESC;
+SELECT github_id, verdict, rule_version, evidence, owner_login, cluster_hidden, scanned_at
+FROM repo_security_verdicts WHERE verdict = 'malicious' OR cluster_hidden = 1 ORDER BY scanned_at DESC;
 ```
 
 ### README 배지

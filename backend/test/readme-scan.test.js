@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { classifyReadme, createReadmeScanner, fetchReadme, RULE_VERSION } from '../src/services/readme-scan.js';
+import {
+  classifyReadme, createReadmeScanner, fetchOwnerCreatedAt, fetchReadme, readmeTraits, NEW_ACCOUNT_DAYS, RULE_VERSION,
+} from '../src/services/readme-scan.js';
 
 // 2026-11-09 공개 피드에서 확인한 군집 README의 핵심 구간(research/readmes/TrackerMonarch_rufus.md).
 const CLUSTER_README = `# Rufus
@@ -69,13 +71,15 @@ test('fetchReadme는 getReadme raw만 호출하고 404는 null, 그 밖의 오�
 const PUSHED = '2026-11-08T08:40:39Z';
 const SCANNED = new Date('2026-11-09T06:00:00Z');
 
-function scanner({ existing = [], readmes = {} } = {}) {
+function scanner({ existing = [], readmes = {}, owners = {}, refreshClusters = async () => 0, minIntervalMs = 100 } = {}) {
   const saved = [];
   const fetched = [];
+  const ownerCalls = [];
   const warnings = [];
   const model = {
     findVerdicts: async (ids) => new Map(existing.filter((row) => ids.includes(row.github_id)).map((row) => [row.github_id, row])),
     upsertVerdict: async (row) => { saved.push(row); },
+    refreshClusters,
   };
   const instance = createReadmeScanner({
     model,
@@ -85,10 +89,18 @@ function scanner({ existing = [], readmes = {} } = {}) {
       if (value instanceof Error) throw value;
       return value ?? null;
     },
+    fetchOwnerCreatedAt: async (octokit, login) => {
+      ownerCalls.push(login);
+      const value = owners[login];
+      if (value instanceof Error) throw value;
+      if (!(value instanceof Date)) throw new Error(`unexpected owner lookup ${login}`);
+      return value;
+    },
     log: { warn: (message) => warnings.push(message) },
     now: () => SCANNED,
+    minIntervalMs,
   });
-  return { instance, saved, fetched, warnings };
+  return { instance, saved, fetched, ownerCalls, warnings };
 }
 
 test('판정이 없는 저장소를 검사해 판정·규칙 버전·push 시각·검사 시각을 저장하고 중복 github_id는 한 번만 검사한다', async () => {
@@ -98,7 +110,7 @@ test('판정이 없는 저장소를 검사해 판정·규칙 버전·push 시각
     { github_id: 1, owner: 'bad', name: 'rufus', pushed_at: PUSHED },
     { github_id: 2, owner: 'ok', name: 'tool', pushed_at: PUSHED },
   ]);
-  assert.deepEqual(result, { scanned: 2, malicious: 1, unknown: 0, skipped: 0 });
+  assert.deepEqual(result, { scanned: 2, malicious: 1, unknown: 0, skipped: 0, cluster_hidden: 0 });
   assert.deepEqual(fetched.sort(), ['bad/rufus', 'ok/tool']);
   const bad = saved.find((row) => row.github_id === 1);
   assert.equal(bad.verdict, 'malicious');
@@ -125,7 +137,7 @@ test('같은 규칙·같은 push 시각이면 건너뛰고, unknown·규칙 버�
     { github_id: 3, owner: 'o', name: 'c', pushed_at: PUSHED },
     { github_id: 4, owner: 'o', name: 'd', pushed_at: '2026-11-09T01:00:00Z' },
   ]);
-  assert.deepEqual(result, { scanned: 3, malicious: 0, unknown: 0, skipped: 1 });
+  assert.deepEqual(result, { scanned: 3, malicious: 0, unknown: 0, skipped: 1, cluster_hidden: 0 });
   assert.deepEqual(fetched.sort(), ['o/b', 'o/c', 'o/d']);
   // 내용이 바뀐 malicious 저장소가 재검사에서 clean이면 판정이 해제된다(R1.4).
   assert.equal(saved.find((row) => row.github_id === 4).verdict, 'clean');
@@ -141,7 +153,7 @@ test('조회 실패: 판정이 없던 저장소는 unknown으로 저장하고, �
     { github_id: 8, owner: 'o', name: 'new', pushed_at: PUSHED },
     { github_id: 9, owner: 'o', name: 'known', pushed_at: '2026-11-09T02:00:00Z' },
   ]);
-  assert.deepEqual(result, { scanned: 0, malicious: 0, unknown: 1, skipped: 0 });
+  assert.deepEqual(result, { scanned: 0, malicious: 0, unknown: 1, skipped: 0, cluster_hidden: 0 });
   assert.deepEqual(saved, [{
     github_id: 8, verdict: 'unknown', rule_version: RULE_VERSION, evidence: null, repo_pushed_at: null, scanned_at: SCANNED,
   }]);
@@ -525,6 +537,7 @@ test('저장 실패는 그 저장소에만 머물고 나머지 판정이 모두 
   const instance = createReadmeScanner({
     model: {
       findVerdicts: async () => new Map(),
+      refreshClusters: async () => 0,
       upsertVerdict: async (row) => {
         if (row.github_id === 1) throw Object.assign(new Error('deadlock'), { code: 'ER_LOCK_DEADLOCK' });
         saved.push(row);
@@ -548,7 +561,7 @@ test('저장 실패는 그 저장소에만 머물고 나머지 판정이 모두 
 test('README 요청 시작은 동시 실행이어도 minIntervalMs 이상 떨어진다', async () => {
   const starts = [];
   const instance = createReadmeScanner({
-    model: { findVerdicts: async () => new Map(), upsertVerdict: async () => {} },
+    model: { findVerdicts: async () => new Map(), upsertVerdict: async () => {}, refreshClusters: async () => 0 },
     fetchReadme: async () => { starts.push(performance.now()); return '# ok'; },
     log: { warn() {} },
     concurrency: 4,
@@ -566,7 +579,7 @@ test('2차 한도(403 rate limit·429)에 걸리면 그 저장소는 R2.2대로 
   const warnings = [];
   let calls = 0;
   const instance = createReadmeScanner({
-    model: { findVerdicts: async () => new Map(), upsertVerdict: async (row) => { saved.push(row); } },
+    model: { findVerdicts: async () => new Map(), upsertVerdict: async (row) => { saved.push(row); }, refreshClusters: async () => 0 },
     fetchReadme: async () => {
       calls++;
       if (calls === 2) throw Object.assign(new Error('You have exceeded a secondary rate limit'), { status: 403, response: { headers: {} } });
@@ -578,7 +591,7 @@ test('2차 한도(403 rate limit·429)에 걸리면 그 저장소는 R2.2대로 
   });
   const result = await instance.scanRepos({}, [1, 2, 3, 4].map((id) => ({ github_id: id, owner: 'o', name: `r${id}`, pushed_at: PUSHED })));
   assert.equal(calls, 2);
-  assert.deepEqual(result, { scanned: 1, malicious: 0, unknown: 1, skipped: 2 });
+  assert.deepEqual(result, { scanned: 1, malicious: 0, unknown: 1, skipped: 2, cluster_hidden: 0 });
   assert.deepEqual(saved.map((row) => [row.github_id, row.verdict]), [[1, 'clean'], [2, 'unknown']]);
   assert.equal(warnings.length, 1);
   assert.match(warnings[0], /rate limited status=403/);
@@ -587,7 +600,7 @@ test('2차 한도(403 rate limit·429)에 걸리면 그 저장소는 R2.2대로 
 test('rate limit이 아닌 403(접근 차단 저장소)은 그 저장소만 unknown으로 남기고 계속한다', async () => {
   const saved = [];
   const instance = createReadmeScanner({
-    model: { findVerdicts: async () => new Map(), upsertVerdict: async (row) => { saved.push(row); } },
+    model: { findVerdicts: async () => new Map(), upsertVerdict: async (row) => { saved.push(row); }, refreshClusters: async () => 0 },
     fetchReadme: async (octokit, owner, name) => {
       if (name === 'r1') throw Object.assign(new Error('Repository access blocked'), { status: 403, response: { headers: { 'x-ratelimit-remaining': '4000' } } });
       return '# ok';
@@ -597,6 +610,250 @@ test('rate limit이 아닌 403(접근 차단 저장소)은 그 저장소만 unkn
     minIntervalMs: 0,
   });
   const result = await instance.scanRepos({}, [1, 2].map((id) => ({ github_id: id, owner: 'o', name: `r${id}`, pushed_at: PUSHED })));
-  assert.deepEqual(result, { scanned: 1, malicious: 0, unknown: 1, skipped: 0 });
+  assert.deepEqual(result, { scanned: 1, malicious: 0, unknown: 1, skipped: 0, cluster_hidden: 0 });
   assert.deepEqual(saved.map((row) => [row.github_id, row.verdict]), [[1, 'unknown'], [2, 'clean']]);
+});
+
+// ── 배포형 캠페인(D-014·D-015) ──
+const PITCH = 'This assistant automates browser tasks, writes small scripts and keeps your daily workflow tidy without any setup. ';
+const DROPBOX = 'https://www.dropbox.com/scl/fi/kvqr16k9/ManusStudio2.0.rar?rlkey=iif54&st=6sg0&dl=1';
+const campaignReadme = (name) => `# ${name}\n\n[![Download](https://img.shields.io/badge/GET-blue)](${DROPBOX})\n\n${PITCH.repeat(5)}\n`;
+const HEADINGS = ['Why', 'Without | With', 'Quick Start', 'Features', 'How It Works', 'Usage', 'Configuration', 'Troubleshooting & FAQ', 'Contributing', 'License'];
+const skeletonReadme = (title, sentence, headings = HEADINGS) => [`# ${title}`, ...headings.map((h) => `## ${h}\n\n${sentence}\n`)].join('\n');
+
+test('본문 키: 소유자·저장소 이름만 다른 같은 README는 같은 키이고, 글자·숫자 300자 미만이면 키가 없다', () => {
+  const a = readmeTraits(campaignReadme('manus--ai').replace('Download', 'Download alpha-owner'), { owner: 'alpha-owner', name: 'manus--ai' });
+  const b = readmeTraits(campaignReadme('ai--manus').replace('Download', 'Download Beta_Owner'), { owner: 'Beta_Owner', name: 'ai--manus' });
+  assert.match(a.textKey, /^[0-9a-f]{64}$/);
+  assert.equal(a.textKey, b.textKey);
+  // 띄어쓰기·줄바꿈만 다른 복사본도 같은 키다(글자·숫자만 비교).
+  const spaced = readmeTraits(campaignReadme('manus--ai').replace(/ /g, '  ').replace('Download', 'Download alpha-owner'), { owner: 'alpha-owner', name: 'manus--ai' });
+  assert.equal(spaced.textKey, a.textKey);
+  assert.notEqual(readmeTraits(`${campaignReadme('x')}one more line`, { owner: 'o', name: 'x' }).textKey, a.textKey);
+  assert.equal(readmeTraits(`# tool\n${'Short text. '.repeat(20)}`, { owner: 'o', name: 'tool' }).textKey, null);
+  // 짧은 소유자 이름도 지운다. 이름만 다른 복사본은 같은 키다.
+  const short = (owner) => readmeTraits(`${owner}/xyz tool by ${owner}. ${PITCH.repeat(4)}`, { owner, name: 'xyz' }).textKey;
+  assert.equal(short('ab'), short('cd'));
+  assert.deepEqual(readmeTraits(null, { owner: 'o', name: 'r' }), { textKey: null, skeletonKey: null, lure: false, archiveFilehostUrl: null });
+});
+
+test('골격 키: 문장이 달라도 첫 제목을 뺀 제목 순서가 같으면 같은 키이고, 8개 미만·코드블록 안 제목은 세지 않는다', () => {
+  const lab = readmeTraits(skeletonReadme('blender-ai-copilot-lab', 'Agents split the brief into assignments with acceptance criteria.'), { owner: 'precyg', name: 'blender-ai-copilot-lab' });
+  const assets = readmeTraits(skeletonReadme('Blender AI Copilot Assets', 'Search three free libraries from inside the chat and import.'), { owner: 'zovul', name: 'blender-ai-copilot-assets' });
+  assert.match(lab.skeletonKey, /^[0-9a-f]{64}$/);
+  assert.equal(lab.skeletonKey, assets.skeletonKey);
+  assert.match(lab.textKey, /^[0-9a-f]{64}$/);
+  assert.notEqual(lab.textKey, assets.textKey);
+  assert.equal(readmeTraits(skeletonReadme('t', 's', HEADINGS.slice(0, 7)), { owner: 'o', name: 't' }).skeletonKey, null);
+  const fenced = `# t\n\`\`\`sh\n${HEADINGS.map((h) => `# ${h}`).join('\n')}\n\`\`\`\n`;
+  assert.equal(readmeTraits(fenced, { owner: 'o', name: 't' }).skeletonKey, null);
+  // 숫자·기호만 있는 제목은 빈 제목으로 빼고 센다.
+  assert.equal(readmeTraits(skeletonReadme('t', 's', [...HEADINGS.slice(0, 7), '1.0', '2.0']), { owner: 'o', name: 't' }).skeletonKey, null);
+});
+
+test('미끼 표시: 압축·실행 파일 URL, 파일호스팅 URL, 같은 줄의 Releases와 파일 이름 — 그 밖의 정상 README는 아니다', () => {
+  const repo = { owner: 'o', name: 'r' };
+  assert.equal(readmeTraits('Get [setup](https://example.com/files/setup.exe?x=1).', repo).lure, true);
+  assert.equal(readmeTraits('Notes: https://mega.nz/folder/AbC#key', repo).lure, true);
+  assert.equal(readmeTraits('1. Download **`mcp-for-blender-pro.zip`** from [Releases](../../releases/latest).', repo).lure, true);
+  for (const text of [
+    '# tool\nInstall with `npm i tool`. See https://github.com/o/r/releases for notes.',
+    'Download the latest release from the Releases page.',
+    'Build `tool.zip` yourself with `make dist`.',
+    'Short links like https://bit.ly/abc.zip are not resolved.'.replace('abc.zip', 'abc'),
+  ]) assert.equal(readmeTraits(text, repo).lure, false, text);
+});
+
+test('압축·실행 파일 파일호스팅 링크: 경로가 확장자로 끝나거나 같은 줄에 파일 이름이 있어야 하고, 폴더 링크는 아니다', () => {
+  const repo = { owner: 'o', name: 'r' };
+  assert.equal(readmeTraits(`[GET](${DROPBOX})`, repo).archiveFilehostUrl, DROPBOX);
+  assert.equal(readmeTraits('Download `Tool.7z`: https://mega.nz/file/AbC#key', repo).archiveFilehostUrl, 'https://mega.nz/file/AbC#key');
+  assert.equal(readmeTraits('Get it at https://dl.dropboxusercontent.com/s/x/Setup.msi', repo).archiveFilehostUrl, 'https://dl.dropboxusercontent.com/s/x/Setup.msi');
+  const folder = readmeTraits('Assets folder: https://mega.nz/folder/AbC#key', repo);
+  assert.equal(folder.lure, true);
+  assert.equal(folder.archiveFilehostUrl, null);
+  assert.equal(readmeTraits('Binary: https://example.com/files/tool.exe', repo).archiveFilehostUrl, null);
+  assert.equal(readmeTraits('Mirror: https://notdropbox.com/x/tool.rar', repo).archiveFilehostUrl, null);
+  // 스킴 대소문자는 링크 판정에 영향을 주지 않는다.
+  assert.equal(readmeTraits('[a.zip](HTTPS://www.mediafire.com/file/x)', repo).archiveFilehostUrl, 'HTTPS://www.mediafire.com/file/x');
+  assert.equal(readmeTraits('Get Https://example.com/a/setup.EXE', repo).lure, true);
+});
+
+test('미끼 표시(D-016): 소유자 자신의 GitHub Pages 링크와 download 안내가 함께 있으면 미끼다', () => {
+  const repo = { owner: 'Alex-Wells-65', name: 'iobit-driver-booster-desktop' };
+  const pagesReadme = (host) => `# Tool\n\n## 01 · ⬇️ Download\n\n<a href="https://${host}/iobit-driver-booster-desktop/"><img src="docs/buttons/installer-card.svg"></a>\n`;
+  const own = readmeTraits(pagesReadme('alex-wells-65.github.io'), repo);
+  assert.equal(own.lure, true);
+  assert.equal(own.archiveFilehostUrl, null);
+  assert.equal(readmeTraits(pagesReadme('ALEX-WELLS-65.GITHUB.IO'), repo).lure, true);
+  // 다른 소유자의 Pages, 이름 일부만 같은 호스트, download 언급 없음은 미끼가 아니다.
+  for (const host of ['someone-else.github.io', 'alex-wells-65x.github.io', 'xalex-wells-65.github.io', 'alex-wells-65.github.io.evil.net']) {
+    assert.equal(readmeTraits(pagesReadme(host), repo).lure, false, host);
+  }
+  assert.equal(readmeTraits('# Tool\n\nDocs: https://alex-wells-65.github.io/iobit-driver-booster-desktop/\n', repo).lure, false);
+  assert.equal(readmeTraits(pagesReadme('alex-wells-65.github.io'), { owner: '', name: 'x' }).lure, false);
+});
+
+test('교차 리뷰 회귀: URL 사용자 정보 속 호스트, 이중 확장자, 더 긴 펜스 안의 제목을 미끼·골격으로 오인하지 않는다', () => {
+  const repo = { owner: 'alpha-owner', name: 'r' };
+  const confused = readmeTraits('Download sample.zip: https://dropbox.com@downloads.example.org/manual.txt', repo);
+  assert.equal(confused.archiveFilehostUrl, null);
+  assert.equal(confused.lure, false);
+  assert.equal(readmeTraits('Download: https://alpha-owner.github.io@docs.example.org/help', repo).lure, false);
+  assert.equal(readmeTraits('Get https://files.example.org:8443/setup.zip', repo).lure, true);
+  // 표준 URL 파서 기준: 잘못된 포트는 링크가 아니고, percent-encoding·전각 호스트는 정규화한 호스트로 본다.
+  assert.equal(readmeTraits('Get https://www.dropbox.com:not-a-port/setup.zip', repo).archiveFilehostUrl, null);
+  assert.equal(readmeTraits('Get https://www.dropbox.com:99999/setup.zip', repo).lure, false);
+  assert.equal(readmeTraits('Get https://%64ropbox.com/s/x/setup.zip', repo).archiveFilehostUrl, 'https://%64ropbox.com/s/x/setup.zip');
+  assert.equal(readmeTraits('Get https://ｄｒｏｐｂｏｘ.com/s/x/setup.zip', repo).archiveFilehostUrl, 'https://ｄｒｏｐｂｏｘ.com/s/x/setup.zip');
+  assert.equal(readmeTraits('Manifest: https://www.dropbox.com/s/abc/tool.exe.manifest', repo).archiveFilehostUrl, null);
+  assert.equal(readmeTraits('Checksums `tool.zip.sha256` in releases', repo).lure, false);
+  const nested = ['# Project', '````markdown', '```sh', 'echo hi', '```', ...HEADINGS.map((h) => `## ${h}`), '````', 'Done.'].join('\n');
+  assert.equal(readmeTraits(nested, repo).skeletonKey, null);
+  // 같은 길이 이상의 같은 문자 펜스만 닫는다.
+  const tilde = ['# P', '~~~', ...HEADINGS.map((h) => `## ${h}`), '```', '~~~~', ...HEADINGS.map((h) => `## ${h}`)].join('\n');
+  assert.match(readmeTraits(tilde, repo).skeletonKey, /^[0-9a-f]{64}$/);
+});
+
+const NEW_OWNER = new Date(SCANNED.getTime() - 30 * 86_400_000);
+const OLD_OWNER = new Date(SCANNED.getTime() - (NEW_ACCOUNT_DAYS + 1) * 86_400_000);
+const codelessTarget = (id, owner, name, extra = {}) => ({ github_id: id, owner, name, pushed_at: PUSHED, language: null, forks: 0, size: 10, ...extra });
+
+test('미끼 링크 규칙: 신생 계정 + 코드 없음 + 압축 파일호스팅 링크면 malicious와 근거, 소유자 조회는 그때만 1번', async () => {
+  const { instance, saved, ownerCalls } = scanner({
+    readmes: { 'NewOwner/manus--ai': campaignReadme('manus--ai'), 'old/manus--ai': campaignReadme('manus--ai') },
+    owners: { NewOwner: NEW_OWNER, old: OLD_OWNER },
+    minIntervalMs: 0,
+  });
+  const result = await instance.scanRepos({}, [codelessTarget(1, 'NewOwner', 'manus--ai'), codelessTarget(2, 'old', 'manus--ai')]);
+  assert.deepEqual(result, { scanned: 2, malicious: 1, unknown: 0, skipped: 0, cluster_hidden: 0 });
+  assert.deepEqual(ownerCalls.sort(), ['NewOwner', 'old']);
+  const bad = saved.find((row) => row.github_id === 1);
+  assert.equal(bad.verdict, 'malicious');
+  assert.equal(bad.evidence, `파일호스팅 링크 ${DROPBOX} · 소유자 계정 생성 ${NEW_OWNER.toISOString().slice(0, 10)}`);
+  assert.equal(bad.owner_login, 'newowner');
+  assert.equal(bad.lure, true);
+  assert.match(bad.text_key, /^[0-9a-f]{64}$/);
+  assert.equal(saved.find((row) => row.github_id === 2).verdict, 'clean');
+});
+
+test('미끼 링크 규칙: 코드 있음·forks 1·메타 없음·폴더 링크·미끼 없음이면 소유자를 조회하지 않고 clean', async () => {
+  const folder = `# tool\n\nAssets: https://mega.nz/folder/AbC#key\n\n${PITCH.repeat(4)}`;
+  const { instance, saved, ownerCalls } = scanner({
+    readmes: {
+      'n/a': campaignReadme('a'), 'n/b': campaignReadme('b'), 'n/c': campaignReadme('c'), 'n/d': folder, 'n/e': `# e\n${PITCH.repeat(4)}`,
+    },
+    owners: { n: NEW_OWNER },
+    minIntervalMs: 0,
+  });
+  await instance.scanRepos({}, [
+    codelessTarget(1, 'n', 'a', { language: 'Go' }),
+    codelessTarget(2, 'n', 'b', { forks: 1 }),
+    { github_id: 3, owner: 'n', name: 'c', pushed_at: PUSHED },
+    codelessTarget(4, 'n', 'd'),
+    codelessTarget(5, 'n', 'e'),
+  ]);
+  assert.deepEqual(ownerCalls, []);
+  assert.deepEqual(saved.map((row) => row.verdict), ['clean', 'clean', 'clean', 'clean', 'clean']);
+  assert.equal(saved.find((row) => row.github_id === 4).lure, true);
+  assert.equal(saved.find((row) => row.github_id === 5).lure, false);
+});
+
+test('소유자 조회 실패·생성일 없음은 README 조회 실패와 같다: 새 저장소는 unknown, 기존 판정은 유지', async () => {
+  const unreadable = Object.assign(new Error('owner created_at unavailable'), { code: 'OWNER_CREATED_AT_UNAVAILABLE' });
+  const { instance, saved, warnings } = scanner({
+    existing: [{ github_id: 2, verdict: 'malicious', rule_version: RULE_VERSION - 1, repo_pushed_at: new Date(PUSHED) }],
+    readmes: { 'gone/a': campaignReadme('a'), 'odd/b': campaignReadme('b') },
+    owners: { gone: Object.assign(new Error('Not Found'), { status: 404 }), odd: unreadable },
+    minIntervalMs: 0,
+  });
+  const result = await instance.scanRepos({}, [codelessTarget(1, 'gone', 'a'), codelessTarget(2, 'odd', 'b')]);
+  assert.deepEqual(result, { scanned: 0, malicious: 0, unknown: 1, skipped: 0, cluster_hidden: 0 });
+  assert.deepEqual(saved.map((row) => [row.github_id, row.verdict]), [[1, 'unknown']]);
+  assert.equal(saved[0].text_key, undefined);
+  assert.deepEqual(warnings.sort(), ['[readme-scan] github_id=1 status=404', '[readme-scan] github_id=2 status=OWNER_CREATED_AT_UNAVAILABLE']);
+});
+
+test('fetchOwnerCreatedAt은 users.getByUsername의 created_at을 Date로 돌려주고, 없거나 읽을 수 없으면 던진다', async () => {
+  const octokit = (data) => ({ rest: { users: { getByUsername: async ({ username }) => ({ data: { login: username, ...data } }) } } });
+  assert.equal((await fetchOwnerCreatedAt(octokit({ created_at: '2026-10-14T01:02:03Z' }), 'x')).toISOString(), '2026-10-14T01:02:03.000Z');
+  await assert.rejects(fetchOwnerCreatedAt(octokit({}), 'x'), { code: 'OWNER_CREATED_AT_UNAVAILABLE' });
+  await assert.rejects(fetchOwnerCreatedAt(octokit({ created_at: 'not a date' }), 'x'), { code: 'OWNER_CREATED_AT_UNAVAILABLE' });
+});
+
+test('소유자 조회가 2차 한도에 걸리면 그 저장소는 unknown, 남은 저장소는 다음 수집으로 넘긴다', async () => {
+  const limited = Object.assign(new Error('You have exceeded a secondary rate limit'), { status: 403, response: { headers: {} } });
+  const { instance, saved, fetched } = scanner({
+    readmes: { 'l/a': campaignReadme('a'), 'l/b': campaignReadme('b') },
+    owners: { l: limited },
+    minIntervalMs: 0,
+  });
+  const result = await instance.scanRepos({}, [codelessTarget(1, 'l', 'a'), codelessTarget(2, 'l', 'b')]);
+  assert.equal(result.unknown + result.skipped, 2);
+  assert.ok(result.unknown >= 1);
+  assert.ok(fetched.length <= 2);
+  assert.ok(saved.every((row) => row.verdict === 'unknown'));
+});
+
+test('소유자 조회도 README 요청과 같은 minIntervalMs 간격으로 시작한다', async () => {
+  const starts = [];
+  const instance = createReadmeScanner({
+    model: { findVerdicts: async () => new Map(), upsertVerdict: async () => {}, refreshClusters: async () => 0 },
+    fetchReadme: async () => { starts.push(performance.now()); return campaignReadme('a'); },
+    fetchOwnerCreatedAt: async () => { starts.push(performance.now()); return NEW_OWNER; },
+    log: { warn() {} },
+    now: () => SCANNED,
+    concurrency: 4,
+    minIntervalMs: 30,
+  });
+  await instance.scanRepos({}, [1, 2, 3].map((id) => codelessTarget(id, `o${id}`, `r${id}`)));
+  assert.equal(starts.length, 6);
+  const sorted = [...starts].sort((a, b) => a - b);
+  sorted.slice(1).forEach((start, index) => assert.ok(start - sorted[index] >= 28, `${sorted}`));
+});
+
+test('군집 재계산: 판정 뒤 1번 부르고 결과를 돌려주며, 모두 건너뛰어도 부르고, 대상이 없으면 부르지 않는다', async () => {
+  let calls = 0;
+  const refreshClusters = async () => { calls++; return 7; };
+  const first = scanner({ readmes: { 'o/a': '# a' }, refreshClusters, minIntervalMs: 0 });
+  assert.equal((await first.instance.scanRepos({}, [{ github_id: 1, owner: 'o', name: 'a', pushed_at: PUSHED }])).cluster_hidden, 7);
+  const skipped = scanner({
+    existing: [{ github_id: 1, verdict: 'clean', rule_version: RULE_VERSION, repo_pushed_at: new Date(PUSHED) }], refreshClusters, minIntervalMs: 0,
+  });
+  const result = await skipped.instance.scanRepos({}, [{ github_id: 1, owner: 'o', name: 'a', pushed_at: PUSHED }]);
+  assert.deepEqual(result, { scanned: 0, malicious: 0, unknown: 0, skipped: 1, cluster_hidden: 7 });
+  assert.equal(calls, 2);
+  await skipped.instance.scanRepos({}, [{ github_id: 'x' }]);
+  assert.equal(calls, 2);
+});
+
+test('군집 재계산이 실패해도 판정 저장과 결과는 그대로이고 오류 원문 없이 경고만 남긴다', async () => {
+  const { instance, saved, warnings } = scanner({
+    readmes: { 'o/a': '# a' },
+    refreshClusters: async () => { throw Object.assign(new Error('Lock wait timeout tok-secret'), { code: 'ER_LOCK_WAIT_TIMEOUT' }); },
+    minIntervalMs: 0,
+  });
+  const result = await instance.scanRepos({}, [{ github_id: 1, owner: 'o', name: 'a', pushed_at: PUSHED }]);
+  assert.deepEqual(result, { scanned: 1, malicious: 0, unknown: 0, skipped: 0, cluster_hidden: null });
+  assert.equal(saved.length, 1);
+  assert.deepEqual(warnings, ['[readme-scan] cluster refresh=ER_LOCK_WAIT_TIMEOUT']);
+});
+
+test('README 판정 정보 계산도 512KB 입력에서 1초 안에 끝난다', () => {
+  for (const text of [
+    `${'# h\n'.repeat(60_000)}`,
+    `${'https://www.dropbox.com/scl/fi/'.repeat(17_000)}`,
+    `${'a.'.repeat(260_000)}zip releases`,
+    `${'x'.repeat(524_288)}`,
+    // 교차 리뷰 회귀: 단독 CR·U+2028 뒤 펜스·제목, 잘못된 URL 반복, 끝 문장부호만 긴 URL.
+    `${'`'.repeat(524_000)}\rX`,
+    `${'~'.repeat(524_000)}\u2028X`,
+    `# ${' '.repeat(524_000)}\rX`,
+    `${'http://[ '.repeat(58_000)}`,
+    `${`https://a.b/${'.'.repeat(1990)} `.repeat(260)}`,
+  ]) {
+    const started = performance.now();
+    readmeTraits(text.slice(0, 524_288), { owner: 'o', name: 'r' });
+    assert.ok(performance.now() - started < 1000, `${text.slice(0, 16)}… took too long`);
+  }
 });

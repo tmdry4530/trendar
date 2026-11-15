@@ -197,7 +197,8 @@ CREATE TABLE IF NOT EXISTS public_rank_history (
   CONSTRAINT fk_prh_repo FOREIGN KEY (repo_id) REFERENCES public_repos(id) ON DELETE CASCADE
 );
 
--- README 판정. github_id 기준으로 대시보드·공개 풀이 공유하고 malicious만 급상승 조회에서 제외한다.
+-- README 판정. github_id 기준으로 대시보드·공개 풀이 공유하고, malicious와 배포형 캠페인 군집 표시(cluster_hidden)를 급상승 조회에서 제외한다.
+-- owner_login·text_key·skeleton_key·lure는 군집 계산용이고 cluster_hidden은 수집마다 다시 계산하는 파생값이다.
 CREATE TABLE IF NOT EXISTS repo_security_verdicts (
   github_id BIGINT NOT NULL PRIMARY KEY,
   verdict ENUM('malicious','clean','unknown') NOT NULL,
@@ -205,7 +206,14 @@ CREATE TABLE IF NOT EXISTS repo_security_verdicts (
   evidence VARCHAR(500) NULL,
   repo_pushed_at DATETIME NULL,
   scanned_at DATETIME NOT NULL,
-  KEY idx_verdict (verdict)
+  owner_login VARCHAR(100) NULL,
+  text_key CHAR(64) NULL,
+  skeleton_key CHAR(64) NULL,
+  lure TINYINT(1) NOT NULL DEFAULT 0,
+  cluster_hidden TINYINT(1) NOT NULL DEFAULT 0,
+  KEY idx_verdict (verdict),
+  KEY idx_text_key (text_key),
+  KEY idx_skeleton_key (skeleton_key)
 );
 
 -- 급상승 알림 웹훅. 수신 URL과 서명 키는 암호화해 저장하고, 발신은 webhook_deliveries(outbox)에서 재시도한다.
