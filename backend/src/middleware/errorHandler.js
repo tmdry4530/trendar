@@ -3,6 +3,7 @@ const USER_MESSAGES = {
   VALIDATION_ERROR: '입력한 내용을 확인해 주세요.',
   UNAUTHORIZED: '로그인이 필요합니다.',
   FORBIDDEN: '이 작업을 할 권한이 없습니다.',
+  BILLING_DISABLED: '신규 결제는 받지 않습니다. 모든 기능을 무료로 이용할 수 있습니다.',
   NOT_FOUND: '요청한 항목을 찾지 못했습니다.',
   DUPLICATE: '이미 등록된 내용입니다.',
   QUERY_LIMIT_EXCEEDED: '등록할 수 있는 수집 조건 수를 모두 사용했습니다.',

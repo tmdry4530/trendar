@@ -9,11 +9,11 @@ import { useTranslation } from 'react-i18next';
 
 interface Props {
   onCreated: () => void;
-  /** QUERY_LIMIT_EXCEEDED 시 호출 (업그레이드 안내용) */
-  onLimitExceeded?: () => void;
+  onLimitExceeded: () => void;
+  limitReached: boolean;
 }
 
-export default function QueryForm({ onCreated, onLimitExceeded }: Props) {
+export default function QueryForm({ onCreated, onLimitExceeded, limitReached }: Props) {
   const toast = useToast();
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
@@ -25,6 +25,7 @@ export default function QueryForm({ onCreated, onLimitExceeded }: Props) {
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
+    if (limitReached || submitting) return;
     if (!isValid) {
       toast.error(t('queries.validation'));
       return;
@@ -37,9 +38,8 @@ export default function QueryForm({ onCreated, onLimitExceeded }: Props) {
       setQueryType('keyword');
       onCreated();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : t('errors.generic');
-      toast.error(msg);
-      if (err instanceof ApiError && err.code === 'QUERY_LIMIT_EXCEEDED') onLimitExceeded?.();
+      if (err instanceof ApiError && err.code === 'QUERY_LIMIT_EXCEEDED') onLimitExceeded();
+      else toast.error(err instanceof Error ? err.message : t('errors.generic'));
     } finally {
       setSubmitting(false);
     }
@@ -75,7 +75,8 @@ export default function QueryForm({ onCreated, onLimitExceeded }: Props) {
           <button
             type="submit"
             className={`btn btn--primary ${styles.submitBtn}`}
-            disabled={submitting || !isValid}
+            disabled={submitting || !isValid || limitReached}
+            aria-describedby={limitReached ? 'query-limit-notice' : undefined}
           >
             {submitting ? <span className="spinner" /> : null}
             {t('queries.add')}

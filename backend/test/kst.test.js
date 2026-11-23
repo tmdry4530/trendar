@@ -49,20 +49,25 @@ test('kstNextMidnight — 자정 정각이면 다음 날 자정', () => {
   );
 });
 
-test('maxManualEtlPerDay — 기본 10, env 정수면 반영, 비정상 값은 기본값', () => {
-  const orig = process.env.MAX_MANUAL_ETL_PER_DAY;
+test('maxManualEtlPerDay — 기본 100, PRO_MAX env 정수면 반영, 구 MAX_*·비정상 값은 무시', () => {
+  const keys = ['PRO_MAX_MANUAL_ETL_PER_DAY', 'MAX_MANUAL_ETL_PER_DAY'];
+  const orig = Object.fromEntries(keys.map((k) => [k, process.env[k]]));
   try {
-    delete process.env.MAX_MANUAL_ETL_PER_DAY;
-    assert.equal(maxManualEtlPerDay(), 10);
+    for (const k of keys) delete process.env[k];
+    assert.equal(maxManualEtlPerDay(), 100);
     process.env.MAX_MANUAL_ETL_PER_DAY = '5';
-    assert.equal(maxManualEtlPerDay(), 5);
-    process.env.MAX_MANUAL_ETL_PER_DAY = '0';
-    assert.equal(maxManualEtlPerDay(), 10);
-    process.env.MAX_MANUAL_ETL_PER_DAY = 'abc';
-    assert.equal(maxManualEtlPerDay(), 10);
+    assert.equal(maxManualEtlPerDay(), 100);
+    process.env.PRO_MAX_MANUAL_ETL_PER_DAY = '200';
+    assert.equal(maxManualEtlPerDay(), 200);
+    process.env.PRO_MAX_MANUAL_ETL_PER_DAY = '0';
+    assert.equal(maxManualEtlPerDay(), 100);
+    process.env.PRO_MAX_MANUAL_ETL_PER_DAY = 'abc';
+    assert.equal(maxManualEtlPerDay(), 100);
   } finally {
-    if (orig === undefined) delete process.env.MAX_MANUAL_ETL_PER_DAY;
-    else process.env.MAX_MANUAL_ETL_PER_DAY = orig;
+    for (const k of keys) {
+      if (orig[k] === undefined) delete process.env[k];
+      else process.env[k] = orig[k];
+    }
   }
 });
 

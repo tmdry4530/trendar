@@ -202,22 +202,11 @@ export interface AdminUsersResult {
   page_size: number;
 }
 
-export interface PlanLimits {
-  manualEtlPerDay: number;
-  queriesPerUser: number;
-}
-
 export interface BillingSubscription {
   status: 'active' | 'trialing' | 'past_due' | 'canceled' | 'paused' | (string & {});
   current_period_end: string | null;
   price_id: string | null;
   has_customer: boolean;
-}
-
-/** Paddle.js 초기화용 공개 설정 (서버가 configured 일 때만 내려준다) */
-export interface PaddleClientConfig {
-  token: string;
-  environment: 'sandbox' | 'production';
 }
 
 export interface BillingUsage {
@@ -228,19 +217,10 @@ export interface BillingUsage {
   manual_reset_at: string;
 }
 
-/** GET /api/billing/me 응답 */
+/** GET /api/billing/me 응답 — 판매 중단 후에는 이전 구독 기록과 사용량만 쓴다. */
 export interface BillingInfo {
-  plan: Plan;
   subscription: BillingSubscription | null;
-  configured: boolean;
-  client: PaddleClientConfig | null;
-  limits: Record<Plan, PlanLimits>;
   usage: BillingUsage;
-}
-
-/** POST /api/billing/checkout 응답 */
-export interface CheckoutResult {
-  transaction_id: string;
 }
 
 /** POST /api/billing/portal 응답 */

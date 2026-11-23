@@ -15,6 +15,7 @@
 .lead { color: var(--muted); font-size: 16px; line-height: 1.6; margin-bottom: 28px; }
 .body { color: var(--text); line-height: 1.7; font-size: 15px; }
 .body h2 { font-size: 17px; margin: 26px 0 8px; }
+.body p + p { margin-top: 12px; }
 .body ul { padding-left: 20px; }
 .body a, .note a { color: var(--accent); }
 .plans { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 16px; }
@@ -23,8 +24,7 @@
 .plan ul { padding-left: 18px; color: var(--muted); line-height: 1.8; flex: 1; }
 .featured { border-color: var(--accent); box-shadow: var(--glow-up); }
 .price { font-size: 32px; font-weight: 700; }
-.price span { font-size: 14px; color: var(--muted); font-weight: 400; }
-.note { color: var(--faint); font-size: 13px; margin-top: 20px; line-height: 1.6; }
+.note { color: var(--muted); font-size: 14px; margin-top: 20px; line-height: 1.6; }
 .footer {
   border-top: 1px solid var(--line);
   margin-top: 40px;

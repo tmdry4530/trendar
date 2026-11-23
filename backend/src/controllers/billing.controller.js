@@ -1,15 +1,8 @@
-// controllers/billing.controller.js — Paddle 체크아웃 생성 + 웹훅 수신 + 플랜 조회.
+// controllers/billing.controller.js — 신규 결제 차단 + 웹훅 수신 + 구독 조회·포털.
 import { httpError } from '../middleware/errorHandler.js';
-import {
-  createCheckoutTransaction,
-  createCustomerPortalSession,
-  isPaddleConfigured,
-  paddleClientToken,
-  paddleEnv,
-  verifyWebhookSignature,
-} from '../utils/paddle.js';
+import { createCustomerPortalSession, verifyWebhookSignature } from '../utils/paddle.js';
 import * as subscriptionsModel from '../models/subscription.model.js';
-import { limitsForPlan, planForSubscription } from '../services/billing.js';
+import { currentLimits, planForSubscription } from '../services/billing.js';
 import * as queriesModel from '../models/query.model.js';
 import * as usersModel from '../models/user.model.js';
 import { kstToday, kstNextMidnight } from '../utils/kst.js';
@@ -25,21 +18,9 @@ export function createBillingController({
   users,
   clock = () => new Date(),
 }) {
+  // 신규 판매 중지: 인증된 요청도 외부·DB 호출 없이 거부한다.
   async function checkout(req, res, next) {
-    try {
-      if (!paddle.isPaddleConfigured()) {
-        throw httpError(503, 'BILLING_NOT_CONFIGURED', '결제 설정이 아직 준비되지 않았습니다.');
-      }
-      const sub = await subscriptions.findByUserId(req.user.id);
-      if (planForSubscription(sub, clock()) === 'pro') {
-        throw httpError(409, 'ALREADY_PRO', '이미 Pro를 이용 중입니다.');
-      }
-      const { transactionId } = await paddle.createCheckoutTransaction({
-        userId: req.user.id,
-        customerId: sub?.paddle_customer_id,
-      });
-      res.json({ ok: true, data: { transaction_id: transactionId } });
-    } catch (e) { next(e); }
+    next(httpError(403, 'BILLING_DISABLED', '신규 결제는 받지 않습니다.'));
   }
 
   async function billingMe(req, res, next) {
@@ -51,8 +32,8 @@ export function createBillingController({
         users.findById(req.user.id),
       ]);
       const plan = planForSubscription(sub, now);
-      const limits = { free: limitsForPlan('free'), pro: limitsForPlan('pro') };
-      const configured = paddle.isPaddleConfigured();
+      const common = currentLimits();
+      const limits = { free: common, pro: common };
       res.json({
         ok: true,
         data: {
@@ -65,16 +46,14 @@ export function createBillingController({
                 has_customer: Boolean(sub.paddle_customer_id),
               }
             : null,
-          configured,
-          client: configured
-            ? { token: paddle.paddleClientToken(), environment: paddle.paddleEnv() }
-            : null,
+          configured: false,
+          client: null,
           limits,
           usage: {
             queries_used: queryRows.length,
-            queries_limit: limits[plan].queriesPerUser,
+            queries_limit: common.queriesPerUser,
             manual_used_today: users.manualUsageFromRow(user, kstToday(now)),
-            manual_limit: limits[plan].manualEtlPerDay,
+            manual_limit: common.manualEtlPerDay,
             manual_reset_at: kstNextMidnight(now).toISOString(),
           },
         },
@@ -97,13 +76,7 @@ export function createBillingController({
 }
 
 export const { checkout, billingMe, portal } = createBillingController({
-  paddle: {
-    createCheckoutTransaction,
-    createCustomerPortalSession,
-    isPaddleConfigured,
-    paddleClientToken,
-    paddleEnv,
-  },
+  paddle: { createCustomerPortalSession },
   subscriptions: subscriptionsModel,
   queries: queriesModel,
   users: usersModel,

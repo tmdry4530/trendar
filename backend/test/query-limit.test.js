@@ -3,55 +3,59 @@ import { test, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { maxQueriesPerUser, assertQueryLimit } from '../src/utils/limits.js';
 
-const ORIGINAL_MAX = process.env.MAX_QUERIES_PER_USER;
+const KEYS = ['PRO_MAX_QUERIES_PER_USER', 'MAX_QUERIES_PER_USER'];
+const ORIGINAL = Object.fromEntries(KEYS.map((k) => [k, process.env[k]]));
+
+function reset() {
+  for (const k of KEYS) delete process.env[k];
+}
 
 after(() => {
-  if (ORIGINAL_MAX === undefined) {
-    delete process.env.MAX_QUERIES_PER_USER;
-  } else {
-    process.env.MAX_QUERIES_PER_USER = ORIGINAL_MAX;
+  for (const k of KEYS) {
+    if (ORIGINAL[k] === undefined) delete process.env[k];
+    else process.env[k] = ORIGINAL[k];
   }
 });
 
-test('maxQueriesPerUser: env 미설정 시 기본값 10', () => {
-  delete process.env.MAX_QUERIES_PER_USER;
-  assert.equal(maxQueriesPerUser(), 10);
+test('maxQueriesPerUser: env 미설정 시 기본값 50', () => {
+  reset();
+  assert.equal(maxQueriesPerUser(), 50);
 });
 
-test('maxQueriesPerUser: MAX_QUERIES_PER_USER=3이면 3', () => {
-  process.env.MAX_QUERIES_PER_USER = '3';
+test('maxQueriesPerUser: PRO_MAX_QUERIES_PER_USER=3이면 3', () => {
+  reset();
+  process.env.PRO_MAX_QUERIES_PER_USER = '3';
   assert.equal(maxQueriesPerUser(), 3);
 });
 
-test('maxQueriesPerUser: 잘못된 값("abc")이면 기본값 10', () => {
-  process.env.MAX_QUERIES_PER_USER = 'abc';
-  assert.equal(maxQueriesPerUser(), 10);
-});
-
-test('maxQueriesPerUser: 잘못된 값("-1")이면 기본값 10', () => {
-  process.env.MAX_QUERIES_PER_USER = '-1';
-  assert.equal(maxQueriesPerUser(), 10);
-});
-
-test('assertQueryLimit: count 9 & 기본 상한(10)이면 통과', () => {
-  delete process.env.MAX_QUERIES_PER_USER;
-  assert.doesNotThrow(() => assertQueryLimit(9));
-});
-
-test('assertQueryLimit: count 10 & 기본 상한(10)이면 throw(400, QUERY_LIMIT_EXCEEDED)', () => {
-  delete process.env.MAX_QUERIES_PER_USER;
-  assert.throws(() => assertQueryLimit(10), (err) => {
-    assert.equal(err.status, 400);
-    assert.equal(err.code, 'QUERY_LIMIT_EXCEEDED');
-    return true;
-  });
-});
-
-test('assertQueryLimit: env=3에서 count 3이면 throw', () => {
+test('maxQueriesPerUser: 구 저가 MAX_QUERIES_PER_USER는 무시한다', () => {
+  reset();
   process.env.MAX_QUERIES_PER_USER = '3';
-  assert.throws(() => assertQueryLimit(3), (err) => {
+  assert.equal(maxQueriesPerUser(), 50);
+});
+
+for (const bad of ['abc', '-1', '0', '1.5', '']) {
+  test(`maxQueriesPerUser: 잘못된 값(${JSON.stringify(bad)})이면 기본값 50`, () => {
+    reset();
+    process.env.PRO_MAX_QUERIES_PER_USER = bad;
+    assert.equal(maxQueriesPerUser(), 50);
+  });
+}
+
+test('assertQueryLimit: 경계 49 통과, 50 거부(400, QUERY_LIMIT_EXCEEDED)', () => {
+  reset();
+  assert.doesNotThrow(() => assertQueryLimit(49));
+  assert.throws(() => assertQueryLimit(50), (err) => {
     assert.equal(err.status, 400);
     assert.equal(err.code, 'QUERY_LIMIT_EXCEEDED');
     return true;
   });
+});
+
+test('assertQueryLimit: PRO_MAX=3에서 count 3이면 throw, 구 MAX=1은 영향 없음', () => {
+  reset();
+  process.env.MAX_QUERIES_PER_USER = '1';
+  process.env.PRO_MAX_QUERIES_PER_USER = '3';
+  assert.doesNotThrow(() => assertQueryLimit(2));
+  assert.throws(() => assertQueryLimit(3), { code: 'QUERY_LIMIT_EXCEEDED' });
 });

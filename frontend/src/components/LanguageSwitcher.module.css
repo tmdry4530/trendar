@@ -19,7 +19,7 @@
 
 @media (max-width: 640px) {
   .select {
-    min-width: 100px;
-    width: 100px;
+    min-width: 106px;
+    padding-right: 12px;
   }
 }

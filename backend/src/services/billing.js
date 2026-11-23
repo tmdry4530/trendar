@@ -29,9 +29,10 @@ export function planOfRow(row) {
   return row?.plan === 'pro' ? 'pro' : 'free';
 }
 
-export function limitsForPlan(plan) {
+// 플랜과 무관한 공통 한도.
+export function currentLimits() {
   return {
-    manualEtlPerDay: maxManualEtlPerDay(plan),
-    queriesPerUser: maxQueriesPerUser(plan),
+    manualEtlPerDay: maxManualEtlPerDay(),
+    queriesPerUser: maxQueriesPerUser(),
   };
 }

@@ -115,9 +115,6 @@ export default function TopNav() {
                 <div className={styles.dropdown} role="menu">
                   <div className={styles.dropdownHead}>
                     <span className={styles.dropdownUser}>{me.user.login}</span>
-                    <span className={me.plan === 'pro' ? 'pill pill--accent' : 'pill'}>
-                      {t(me.plan === 'pro' ? 'billing.plan.pro' : 'billing.plan.free')}
-                    </span>
                   </div>
                   <button
                     type="button"

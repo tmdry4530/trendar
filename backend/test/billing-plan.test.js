@@ -1,7 +1,7 @@
 // test/billing-plan.test.js — 요금제 판정 로직 (DB 불필요, 순수 함수).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { planForSubscription, limitsForPlan } from '../src/services/billing.js';
+import { planForSubscription, currentLimits } from '../src/services/billing.js';
 import { maxManualEtlPerDay, maxQueriesPerUser } from '../src/utils/limits.js';
 
 test('구독 없으면 free', () => {
@@ -28,19 +28,23 @@ test('paused면 free', () => {
   assert.equal(planForSubscription({ status: 'paused' }), 'free');
 });
 
-test('한도: free=10/10, pro=100/50 (기본값)', () => {
-  delete process.env.PRO_MAX_MANUAL_ETL_PER_DAY;
-  delete process.env.PRO_MAX_QUERIES_PER_USER;
-  delete process.env.MAX_MANUAL_ETL_PER_DAY;
-  delete process.env.MAX_QUERIES_PER_USER;
-  assert.deepEqual(limitsForPlan('free'), { manualEtlPerDay: 10, queriesPerUser: 10 });
-  assert.deepEqual(limitsForPlan('pro'), { manualEtlPerDay: 100, queriesPerUser: 50 });
-});
-
-test('한도: env로 재정의 가능', () => {
+test('한도: 모든 사용자 공통 기본값 수동 100/조건 50, 구 MAX_*는 무시', (t) => {
+  const keys = ['MAX_MANUAL_ETL_PER_DAY', 'MAX_QUERIES_PER_USER', 'PRO_MAX_MANUAL_ETL_PER_DAY', 'PRO_MAX_QUERIES_PER_USER'];
+  const previous = Object.fromEntries(keys.map((key) => [key, process.env[key]]));
+  t.after(() => {
+    for (const key of keys) {
+      if (previous[key] === undefined) delete process.env[key];
+      else process.env[key] = previous[key];
+    }
+  });
+  for (const key of keys) delete process.env[key];
+  assert.deepEqual(currentLimits(), { manualEtlPerDay: 100, queriesPerUser: 50 });
+  process.env.MAX_MANUAL_ETL_PER_DAY = '10';
+  process.env.MAX_QUERIES_PER_USER = '10';
+  assert.deepEqual(currentLimits(), { manualEtlPerDay: 100, queriesPerUser: 50 });
   process.env.PRO_MAX_MANUAL_ETL_PER_DAY = '200';
-  assert.equal(limitsForPlan('pro').manualEtlPerDay, 200);
-  delete process.env.PRO_MAX_MANUAL_ETL_PER_DAY;
+  process.env.PRO_MAX_QUERIES_PER_USER = '70';
+  assert.deepEqual(currentLimits(), { manualEtlPerDay: 200, queriesPerUser: 70 });
 });
 
 test('표시 한도는 검증에 쓰이는 한도와 env 재정의·잘못된 값에서도 같다', (t) => {
@@ -54,11 +58,9 @@ test('표시 한도는 검증에 쓰이는 한도와 env 재정의·잘못된 �
   });
   for (const value of ['23', '0', '-1', 'invalid', '1.5', '']) {
     for (const key of keys) process.env[key] = value;
-    for (const plan of ['free', 'pro']) {
-      assert.deepEqual(limitsForPlan(plan), {
-        manualEtlPerDay: maxManualEtlPerDay(plan),
-        queriesPerUser: maxQueriesPerUser(plan),
-      });
-    }
+    assert.deepEqual(currentLimits(), {
+      manualEtlPerDay: maxManualEtlPerDay(),
+      queriesPerUser: maxQueriesPerUser(),
+    });
   }
 });

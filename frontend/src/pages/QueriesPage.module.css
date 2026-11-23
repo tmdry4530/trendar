@@ -77,15 +77,11 @@
   gap: 6px;
 }
 
-.upgradeNotice {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
+.limitNotice {
   padding: 11px 14px;
-  border: 1px solid var(--accent-dim);
+  border: 1px solid var(--down);
   border-radius: var(--radius);
-  background: var(--accent-soft);
+  background: var(--surface-2);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -99,10 +95,5 @@
   .etlControls {
     flex-wrap: wrap;
     width: 100%;
-  }
-
-  .upgradeNotice {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }

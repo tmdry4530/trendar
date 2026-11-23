@@ -3,11 +3,11 @@ import assert from 'node:assert/strict';
 import * as Query from '../src/models/query.model.js';
 import { pool } from '../src/config/db.js';
 
-const ORIGINAL_MAX = process.env.MAX_QUERIES_PER_USER;
+const ORIGINAL_MAX = process.env.PRO_MAX_QUERIES_PER_USER;
 
 after(() => {
-  if (ORIGINAL_MAX === undefined) delete process.env.MAX_QUERIES_PER_USER;
-  else process.env.MAX_QUERIES_PER_USER = ORIGINAL_MAX;
+  if (ORIGINAL_MAX === undefined) delete process.env.PRO_MAX_QUERIES_PER_USER;
+  else process.env.PRO_MAX_QUERIES_PER_USER = ORIGINAL_MAX;
 });
 
 function fakeConnection({ count = 0, insertId = 1, insertError } = {}) {
@@ -43,7 +43,7 @@ async function withConnection(connection, fn) {
 }
 
 test('create: 제한 도달 시 users 행 잠금 후 INSERT 없이 rollback/release', async () => {
-  process.env.MAX_QUERIES_PER_USER = '1';
+  process.env.PRO_MAX_QUERIES_PER_USER = '1';
   const connection = fakeConnection({ count: 1 });
 
   await withConnection(connection, async () => {
@@ -68,7 +68,7 @@ test('create: 제한 도달 시 users 행 잠금 후 INSERT 없이 rollback/rele
 });
 
 test('create: 삽입 성공 시 commit/release하고 생성 결과를 반환', async () => {
-  process.env.MAX_QUERIES_PER_USER = '10';
+  process.env.PRO_MAX_QUERIES_PER_USER = '10';
   const connection = fakeConnection({ count: 0, insertId: 12 });
 
   const result = await withConnection(connection, () =>
@@ -84,7 +84,7 @@ test('create: 삽입 성공 시 commit/release하고 생성 결과를 반환', a
 });
 
 test('create: 중복 INSERT 오류는 그대로 전달하고 rollback/release', async () => {
-  process.env.MAX_QUERIES_PER_USER = '10';
+  process.env.PRO_MAX_QUERIES_PER_USER = '10';
   const duplicate = Object.assign(new Error('duplicate'), { code: 'ER_DUP_ENTRY' });
   const connection = fakeConnection({ insertError: duplicate });
 

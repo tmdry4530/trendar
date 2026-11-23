@@ -33,9 +33,9 @@ test('API 응답에 브라우저 보안 헤더를 설정한다', async () => {
     const [name, ...sources] = directive.trim().split(/\s+/);
     return [name, sources];
   }));
-  assert.deepEqual(directives['script-src'], ["'self'", 'https://cdn.paddle.com']);
-  assert.deepEqual(directives['frame-src'], ['https://buy.paddle.com', 'https://sandbox-buy.paddle.com']);
-  assert.deepEqual(directives['connect-src'], ["'self'", 'https://*.paddle.com']);
+  assert.deepEqual(directives['script-src'], ["'self'"]);
+  assert.deepEqual(directives['frame-src'], ["'none'"]);
+  assert.deepEqual(directives['connect-src'], ["'self'"]);
   assert.deepEqual(directives['frame-ancestors'], ["'none'"]);
   assert.match(policy, /frame-ancestors 'none'/);
 });

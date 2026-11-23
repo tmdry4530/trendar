@@ -2,8 +2,8 @@
 // utils/limits.js — 사용자당 watch query 상한
 import { httpError } from '../middleware/errorHandler.js';
 
-const DEFAULT_MAX_QUERIES_PER_USER = 10;
-const DEFAULT_MAX_MANUAL_ETL_PER_DAY = 10;
+const DEFAULT_MAX_QUERIES_PER_USER = 50;
+const DEFAULT_MAX_MANUAL_ETL_PER_DAY = 100;
 const DEFAULT_TREND_WINDOW_DAYS = 90;
 const DEFAULT_TREND_MIN_STARS = 50;
 const DEFAULT_RISING_WINDOW_DAYS = 15;
@@ -19,27 +19,17 @@ const DEFAULT_PUBLIC_IMAGE_RATE_LIMIT_PER_MIN = 120;
 const DEFAULT_PUBLIC_ANALYTICS_FLUSH_MS = 60000;
 const DEFAULT_TRUST_PROXY_HOPS = 1;
 
-export function maxQueriesPerUser(plan = 'free') {
-  if (plan === 'pro') {
-    const parsed = Number(process.env.PRO_MAX_QUERIES_PER_USER);
-    if (Number.isInteger(parsed) && parsed > 0) return parsed;
-    return 50;
-  }
-  const raw = process.env.MAX_QUERIES_PER_USER;
-  const parsed = Number(raw);
-  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_MAX_QUERIES_PER_USER;
-  return parsed;
+// 모든 로그인 사용자 공통 한도. 기존 Pro 설정(PRO_MAX_*)만 따르고 낮은 구 무료 MAX_*는 쓰지 않는다.
+export function maxQueriesPerUser() {
+  const parsed = Number(process.env.PRO_MAX_QUERIES_PER_USER);
+  if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  return DEFAULT_MAX_QUERIES_PER_USER;
 }
 
-export function maxManualEtlPerDay(plan = 'free') {
-  if (plan === 'pro') {
-    const parsed = Number(process.env.PRO_MAX_MANUAL_ETL_PER_DAY);
-    if (Number.isInteger(parsed) && parsed > 0) return parsed;
-    return 100;
-  }
-  const parsed = Number(process.env.MAX_MANUAL_ETL_PER_DAY);
-  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_MAX_MANUAL_ETL_PER_DAY;
-  return parsed;
+export function maxManualEtlPerDay() {
+  const parsed = Number(process.env.PRO_MAX_MANUAL_ETL_PER_DAY);
+  if (Number.isInteger(parsed) && parsed > 0) return parsed;
+  return DEFAULT_MAX_MANUAL_ETL_PER_DAY;
 }
 
 export function trendWindowDays() {
@@ -130,9 +120,9 @@ export function publicRisingConfig() {
   };
 }
 
-export function assertQueryLimit(currentCount, plan = 'free') {
-  const max = maxQueriesPerUser(plan);
+export function assertQueryLimit(currentCount) {
+  const max = maxQueriesPerUser();
   if (currentCount >= max) {
-    throw httpError(400, 'QUERY_LIMIT_EXCEEDED', `수집 조건은 ${plan === 'pro' ? 'Pro ' : ''}사용자당 최대 ${max}개까지 등록할 수 있습니다.`);
+    throw httpError(400, 'QUERY_LIMIT_EXCEEDED', `수집 조건은 사용자당 최대 ${max}개까지 등록할 수 있습니다.`);
   }
 }

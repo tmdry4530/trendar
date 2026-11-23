@@ -1,10 +1,11 @@
-// LegalPages.tsx — 공개(비로그인 접근 가능) 가격·약관·개인정보·환불 페이지.
-// Paddle 도메인 심사용. 결제는 Paddle(Merchant of Record)이 처리한다.
+// LegalPages.tsx — 공개(비로그인 접근 가능) 무료 이용 안내·약관·개인정보·환불 페이지.
+// 이전 구독의 결제는 Paddle(Merchant of Record)이 처리했다. 현재는 신규 판매가 없다.
 import type { ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import styles from './LegalPages.module.css';
 import { useAuth } from '../auth/AuthContext';
+import { toSupportedLocale } from '../i18n';
 
 export const LEGAL = {
   product: 'Trendar',
@@ -13,7 +14,7 @@ export const LEGAL = {
   country: 'Republic of Korea',
   email: 'mangg363@gmail.com',
   site: 'https://trendar.org',
-  updated: 'October 15, 2026',
+  updated: 'November 24, 2026',
 };
 
 function Shell({ title, children }: { title: string; children: ReactNode }) {
@@ -27,20 +28,11 @@ function Shell({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-// backend utils/limits.js 기본값 (MAX_*/PRO_MAX_* 미설정 시)
-const DEFAULT_LIMITS = {
-  free: { queries: 10, manual: 10 },
-  pro: { queries: 50, manual: 100 },
-};
-
-// 업그레이드(결제) 시작 위치는 /account/billing 한 곳. 비로그인은 로그인 후 그 화면으로 돌아온다.
-const LOGIN_TO_BILLING = '/api/auth/github?next=/account/billing';
-
 export function PricingPage() {
-  const { status, me } = useAuth();
-  const { t } = useTranslation();
+  const { status } = useAuth();
+  const { t, i18n } = useTranslation();
+  const locale = toSupportedLocale(i18n.resolvedLanguage) ?? 'en';
   const authed = status === 'authed';
-  const isPro = authed && me?.plan === 'pro';
 
   return (
     <article className={styles.page}>
@@ -49,44 +41,38 @@ export function PricingPage() {
       <p className={styles.lead}>{t('pricing.lead')}</p>
       <div className={styles.plans}>
         <section className={`panel ${styles.plan}`}>
-          <h2>{t('pricing.free.name')}</h2>
-          <div className={styles.price}>{t('pricing.free.price')}</div>
+          <h2>{t('pricing.feeds.name')}</h2>
+          <div className={styles.price}>{t('pricing.feeds.price')}</div>
           <ul>
-            <li>{t('pricing.free.dashboard')}</li>
-            <li>{t('pricing.free.queries', { count: DEFAULT_LIMITS.free.queries })}</li>
-            <li>{t('pricing.free.manual', { count: DEFAULT_LIMITS.free.manual })}</li>
-            <li>{t('pricing.free.charts')}</li>
-            <li>{t('pricing.free.bookmarks')}</li>
+            <li>{t('pricing.feeds.noSignIn')}</li>
+            <li>{t('pricing.feeds.browse')}</li>
+            <li>{t('pricing.feeds.charts')}</li>
           </ul>
-          {!authed && (
-            <a href="/api/auth/github" className="btn">{t('pricing.free.start')}</a>
-          )}
+          <a href={locale === 'ko' ? '/ko/trending' : '/trending'} className="btn">{t('pricing.feeds.open')}</a>
         </section>
         <section className={`panel ${styles.plan} ${styles.featured}`}>
-          <h2>{t('pricing.pro.name')}</h2>
-          <div className={styles.price}>
-            {t('pricing.pro.price')}<span>{t('pricing.perMonth')}</span>
-          </div>
+          <h2>{t('pricing.account.name')}</h2>
+          <div className={styles.price}>{t('pricing.account.price')}</div>
           <ul>
-            <li>{t('pricing.pro.everything')}</li>
-            <li>{t('pricing.pro.queries', { count: DEFAULT_LIMITS.pro.queries })}</li>
-            <li>{t('pricing.pro.manual', { count: DEFAULT_LIMITS.pro.manual })}</li>
-            <li>{t('pricing.pro.support')}</li>
+            <li>{t('pricing.account.dashboard')}</li>
+            <li>{t('pricing.account.limits')}</li>
+            <li>{t('pricing.account.bookmarks')}</li>
           </ul>
-          {isPro ? (
-            <>
-              <p className={styles.note}>{t('pricing.pro.current')}</p>
-              <Link to="/account/billing" className="btn">{t('pricing.pro.manage')}</Link>
-            </>
-          ) : authed ? (
-            <Link to="/account/billing" className="btn btn--primary">{t('pricing.pro.upgrade')}</Link>
+          {authed ? (
+            <Link to="/" className="btn btn--primary">{t('pricing.account.open')}</Link>
           ) : (
-            <a href={LOGIN_TO_BILLING} className="btn btn--primary">{t('pricing.pro.signIn')}</a>
+            <a href="/api/auth/github" className="btn btn--primary">{t('pricing.account.start')}</a>
           )}
         </section>
       </div>
       <p className={styles.note}>
         {t('pricing.notePrefix')}
+        {authed ? (
+          <Link to="/account/billing">{t('pricing.accountLink')}</Link>
+        ) : (
+          <a href="/api/auth/github?next=/account/billing">{t('pricing.accountLink')}</a>
+        )}
+        {t('pricing.noteMid')}
         <Link to="/refund">{t('pricing.refundLink')}</Link>
         {t('pricing.noteSuffix')}
       </p>
@@ -113,13 +99,14 @@ export function TermsPage() {
         You sign in with your GitHub account. You are responsible for activity under your account
         and must be at least 14 years old.
       </p>
-      <h2>3. Subscriptions and payment</h2>
+      <h2>3. Free use and earlier subscriptions</h2>
       <p>
-        Trendar Pro is a paid subscription billed monthly in advance. Our order process is
-        conducted by our online reseller Paddle.com. Paddle.com is the Merchant of Record for all
-        our orders. Paddle provides all customer service inquiries and handles returns.
-        Subscriptions renew automatically until cancelled; cancellation takes effect at the end of
-        the current billing period.
+        {L.product} is free to use and we no longer sell paid plans. Earlier Trendar Pro
+        subscriptions were ordered through our online reseller Paddle.com, the Merchant of Record
+        for those orders; Paddle provides customer service for them and handles returns. An earlier
+        subscription keeps renewing automatically until you cancel it, and cancellation takes
+        effect at the end of the current billing period. You can manage it from Usage &amp;
+        subscription in your account.
       </p>
       <h2>4. Acceptable use</h2>
       <p>
@@ -161,7 +148,7 @@ export function PrivacyPage() {
         <li>GitHub account basics provided at sign-in: user ID, username, display name, avatar, email if shared.</li>
         <li>Your saved queries, bookmarks and settings.</li>
         <li>Technical logs (IP address, browser, timestamps) for security and debugging.</li>
-        <li>Billing details are collected and processed by Paddle.com as Merchant of Record; we receive only subscription status and basic order information.</li>
+        <li>Billing details of earlier subscriptions are collected and processed by Paddle.com as Merchant of Record; we receive only subscription status and basic order information.</li>
       </ul>
       <h2>How we use it</h2>
       <p>To provide and secure the service, send emails you opt into (digests, alerts, receipts), and improve features. We do not sell personal data.</p>
@@ -184,8 +171,9 @@ export function RefundPage() {
   return (
     <Shell title="Refund Policy">
       <p>
-        We want you to be happy with Trendar Pro. If you are not satisfied, you can request a full
-        refund within 14 days of your first payment or of any renewal.
+        Trendar no longer sells paid plans. If you paid for an earlier Trendar Pro subscription and
+        are not satisfied, you can request a full refund within 14 days of your first payment or of
+        any renewal.
       </p>
       <h2>How to request a refund</h2>
       <p>
@@ -196,8 +184,9 @@ export function RefundPage() {
       </p>
       <h2>Cancellation</h2>
       <p>
-        You can cancel anytime. After cancellation you keep Pro access until the end of the current
-        billing period and will not be charged again.
+        You can cancel an earlier subscription anytime from Usage &amp; subscription in your account
+        or through the link in your Paddle receipt email. After cancellation you will not be
+        charged again, and the subscription ends at the end of the current billing period.
       </p>
       <p>{L.legalName}</p>
     </Shell>

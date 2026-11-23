@@ -12,7 +12,7 @@ export async function findAll(userId) {
   return rows.map((r) => ({ ...r, is_active: Boolean(r.is_active), repo_count: Number(r.repo_count) }));
 }
 
-export async function create(userId, { query, query_type = 'keyword' }, plan = 'free') {
+export async function create(userId, { query, query_type = 'keyword' }) {
   const connection = await pool.getConnection();
   try {
     await connection.beginTransaction();
@@ -21,7 +21,7 @@ export async function create(userId, { query, query_type = 'keyword' }, plan = '
       'SELECT COUNT(*) AS c FROM watch_queries WHERE user_id = ?',
       [userId]
     );
-    assertQueryLimit(Number(c), plan);
+    assertQueryLimit(Number(c));
     const [res] = await connection.query(
       'INSERT INTO watch_queries (user_id, query, query_type) VALUES (?, ?, ?)',
       [userId, query, query_type]
