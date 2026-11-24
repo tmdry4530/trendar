@@ -1,0 +1,448 @@
+{
+  "timestamp": "2026-11-24T00:09:52.949Z",
+  "engine": "js-v3",
+  "node_version": "v24.22.3",
+  "golden": {
+    "byCategory": {
+      "benign": {
+        "total": 11,
+        "passed": 8,
+        "fp": 3,
+        "fn": 0
+      },
+      "malicious_baseline": {
+        "total": 6,
+        "passed": 6,
+        "fp": 0,
+        "fn": 0
+      },
+      "evasion_v4": {
+        "total": 17,
+        "passed": 0,
+        "fp": 0,
+        "fn": 17
+      }
+    },
+    "details": [
+      {
+        "id": "benign-scoop",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "benign-bun",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "benign-negation",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "malicious",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "benign-exclusion",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "benign-smartscreen",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "benign-table-pipes",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "benign-defender-notifications",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "benign-security-research-doc",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "malicious",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "benign-state-description",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "malicious",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "benign-only-protection-off",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "benign-korean-negation",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "mal-v3-cluster-rufus",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "mal-v3-save-and-run",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "mal-v3-process-subst",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "mal-v3-encoded-utf16",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "mal-v3-mshta",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "mal-v3-codeless-generic-off",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": null
+      },
+      {
+        "id": "evasion-01-ps-backtick",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-02-ps-var-url",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-03-ps-concat-iex",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-04-ps-format-op",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-05-curl-python3",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-06-curl-pwsh",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-07-shell-base64",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-08-shell-hex",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-09-tab-enc",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-10-html-comment-dos",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-11-blank-lines-window",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-12-exclusion-smuggle",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-13-zero-width",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-14-cyrillic-homoglyph",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-15-lolbin-regsvr32",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-16-non-english-korean",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      },
+      {
+        "id": "evasion-17-metadata-homepage-typosquat",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "clean",
+        "pass": false,
+        "score": null
+      }
+    ],
+    "traitsResults": [
+      {
+        "id": "evasion-ref-link-filehost",
+        "pass": false,
+        "archiveFilehostUrl": null,
+        "lure": true
+      },
+      {
+        "id": "evasion-fuzzy-simhash-comment-mutation",
+        "pass": false,
+        "exactMatch": false,
+        "simhashDistance": null
+      }
+    ],
+    "manifestResults": []
+  },
+  "corpus": {
+    "total_docs": 3595,
+    "total_mb": 68.52,
+    "iterations": 3,
+    "avg_total_ms": 6783.23,
+    "docs_per_sec": 530,
+    "mb_per_sec": 10.1,
+    "latency_ms": {
+      "p50": 1.103,
+      "p95": 5.4652,
+      "p99": 16.0016,
+      "max": 65.6961
+    },
+    "memory_mb": {
+      "rss_before": 250.88,
+      "rss_peak": 350.71,
+      "heap_before": 131.58,
+      "heap_peak": 207.94
+    },
+    "datasets": {
+      "preserved_92": {
+        "total": 92,
+        "direct_malicious": 56,
+        "cluster_hidden": 0,
+        "total_hidden": 56,
+        "archive_filehost": 0,
+        "lure": 8
+      },
+      "live_2026_11_14": {
+        "total": 162,
+        "direct_malicious": 0,
+        "cluster_hidden": 130,
+        "total_hidden": 130,
+        "archive_filehost": 120,
+        "lure": 136
+      },
+      "legit_2026_11_14": {
+        "total": 1992,
+        "direct_malicious": 0,
+        "cluster_hidden": 165,
+        "total_hidden": 165,
+        "archive_filehost": 152,
+        "lure": 483
+      },
+      "older_2026_11_14": {
+        "total": 1107,
+        "direct_malicious": 0,
+        "cluster_hidden": 0,
+        "total_hidden": 0,
+        "archive_filehost": 0,
+        "lure": 142,
+        "flagged_ids": []
+      },
+      "live_2026_11_15": {
+        "total": 242,
+        "direct_malicious": 0,
+        "cluster_hidden": 206,
+        "total_hidden": 206,
+        "archive_filehost": 180,
+        "lure": 213
+      }
+    }
+  },
+  "pathological": {
+    "cases": 15,
+    "total_mb": 6.67,
+    "total_ms": 1775.75,
+    "max_case_ms": 438.45,
+    "mb_per_sec": 3.76,
+    "perCase": [
+      {
+        "name": "curl_repeat",
+        "ms": 30.39
+      },
+      {
+        "name": "irm_pipe_long",
+        "ms": 139.96
+      },
+      {
+        "name": "disable_windows",
+        "ms": 24.59
+      },
+      {
+        "name": "save_chain",
+        "ms": 79.59
+      },
+      {
+        "name": "scriptblock_spaces",
+        "ms": 19.75
+      },
+      {
+        "name": "enc_480k",
+        "ms": 323.76
+      },
+      {
+        "name": "enc_8k_repeats",
+        "ms": 45.52
+      },
+      {
+        "name": "url_250k",
+        "ms": 171.24
+      },
+      {
+        "name": "dropbox_17k",
+        "ms": 25.28
+      },
+      {
+        "name": "bad_urls_58k",
+        "ms": 9.25
+      },
+      {
+        "name": "headings_60k",
+        "ms": 62.81
+      },
+      {
+        "name": "zip_releases_dots",
+        "ms": 388.37
+      },
+      {
+        "name": "backtick_cr",
+        "ms": 1.17
+      },
+      {
+        "name": "tilde_ls",
+        "ms": 15.45
+      },
+      {
+        "name": "url_trailing_dots",
+        "ms": 438.45
+      }
+    ]
+  }
+}

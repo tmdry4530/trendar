@@ -14,7 +14,9 @@ import { createReadmeScanner } from '../services/readme-scan.js';
 import * as securityModel from '../models/security.model.js';
 import { notifyRising } from '../services/webhook-rising.js';
 
-const MIN_STARS = Number(process.env.ETL_MIN_STARS) || 0;
+function baseMinStars() {
+  return Number(process.env.ETL_MIN_STARS) || 0;
+}
 const TOKEN_INVALID_MESSAGE = 'GitHub 연결이 유효하지 않습니다. 다시 로그인해 주세요.';
 
 // 수집 루프에 진입하기 전(=아직 아무 작업도 하지 않은) 거부임을 표시한다.
@@ -38,7 +40,7 @@ export function buildSlices(now = new Date()) {
   const trendDays = trendWindowDays();
   const freshDays = freshWindowDays();
   const slices = [
-    { label: 'base', minStars: MIN_STARS },
+    { label: 'base', minStars: baseMinStars() },
     { label: 'trend', minStars: trendMinStars(), createdAfter: daysAgo(now, trendDays) },
   ];
   if (freshDays < trendDays) {

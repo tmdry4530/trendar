@@ -1,0 +1,477 @@
+{
+  "timestamp": "2026-11-24T00:31:39.149Z",
+  "engine": "rust-napi-v4",
+  "node_version": "v24.22.3",
+  "golden": {
+    "byCategory": {
+      "benign": {
+        "total": 11,
+        "passed": 11,
+        "fp": 0,
+        "fn": 0
+      },
+      "malicious_baseline": {
+        "total": 6,
+        "passed": 6,
+        "fp": 0,
+        "fn": 0
+      },
+      "evasion_v4": {
+        "total": 17,
+        "passed": 17,
+        "fp": 0,
+        "fn": 0
+      }
+    },
+    "details": [
+      {
+        "id": "benign-scoop",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-bun",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-negation",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-exclusion",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-smartscreen",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-table-pipes",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 60
+      },
+      {
+        "id": "benign-defender-notifications",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-security-research-doc",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 50
+      },
+      {
+        "id": "benign-state-description",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-only-protection-off",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 45
+      },
+      {
+        "id": "benign-korean-negation",
+        "category": "benign",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 60
+      },
+      {
+        "id": "mal-v3-cluster-rufus",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "mal-v3-save-and-run",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "mal-v3-process-subst",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "mal-v3-encoded-utf16",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "mal-v3-mshta",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "mal-v3-codeless-generic-off",
+        "category": "malicious_baseline",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-01-ps-backtick",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-02-ps-var-url",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-03-ps-concat-iex",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-04-ps-format-op",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-05-curl-python3",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-06-curl-pwsh",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-07-shell-base64",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-08-shell-hex",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-09-tab-enc",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-10-html-comment-dos",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-11-blank-lines-window",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-12-exclusion-smuggle",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-13-zero-width",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-14-cyrillic-homoglyph",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-15-lolbin-regsvr32",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-16-non-english-korean",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      },
+      {
+        "id": "evasion-17-metadata-homepage-typosquat",
+        "category": "evasion_v4",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 100
+      }
+    ],
+    "traitsResults": [
+      {
+        "id": "evasion-ref-link-filehost",
+        "pass": true,
+        "archiveFilehostUrl": "https://mega.nz/file/AbC#key",
+        "lure": true
+      },
+      {
+        "id": "evasion-fuzzy-simhash-comment-mutation",
+        "pass": true,
+        "exactMatch": false,
+        "simhashDistance": 4
+      }
+    ],
+    "manifestResults": [
+      {
+        "id": "manifest-npm-postinstall-malicious",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 80
+      },
+      {
+        "id": "manifest-vscode-autorun-malicious",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 80
+      },
+      {
+        "id": "manifest-npm-clean",
+        "expected": "clean",
+        "actual": "clean",
+        "pass": true,
+        "score": 0
+      },
+      {
+        "id": "manifest-decoy-tree-binary",
+        "expected": "malicious",
+        "actual": "malicious",
+        "pass": true,
+        "score": 75
+      }
+    ]
+  },
+  "corpus": {
+    "total_docs": 3595,
+    "total_mb": 68.52,
+    "iterations": 3,
+    "avg_total_ms": 5268.12,
+    "docs_per_sec": 682.4,
+    "mb_per_sec": 13.01,
+    "latency_ms": {
+      "p50": 0.7948,
+      "p95": 4.1827,
+      "p99": 12.1981,
+      "max": 78.2109
+    },
+    "memory_mb": {
+      "rss_before": 282.2,
+      "rss_peak": 314.48,
+      "heap_before": 130.23,
+      "heap_peak": 143.2
+    },
+    "datasets": {
+      "preserved_92": {
+        "total": 92,
+        "direct_malicious": 56,
+        "cluster_hidden": 0,
+        "total_hidden": 56,
+        "archive_filehost": 0,
+        "lure": 8
+      },
+      "live_2026_11_14": {
+        "total": 162,
+        "direct_malicious": 0,
+        "cluster_hidden": 130,
+        "total_hidden": 130,
+        "archive_filehost": 120,
+        "lure": 136
+      },
+      "legit_2026_11_14": {
+        "total": 1992,
+        "direct_malicious": 0,
+        "cluster_hidden": 165,
+        "total_hidden": 165,
+        "archive_filehost": 152,
+        "lure": 483
+      },
+      "older_2026_11_14": {
+        "total": 1107,
+        "direct_malicious": 0,
+        "cluster_hidden": 0,
+        "total_hidden": 0,
+        "archive_filehost": 0,
+        "lure": 141,
+        "flagged_ids": []
+      },
+      "live_2026_11_15": {
+        "total": 242,
+        "direct_malicious": 0,
+        "cluster_hidden": 206,
+        "total_hidden": 206,
+        "archive_filehost": 180,
+        "lure": 213
+      }
+    }
+  },
+  "pathological": {
+    "cases": 15,
+    "total_mb": 6.67,
+    "total_ms": 298.29,
+    "max_case_ms": 75.56,
+    "mb_per_sec": 22.37,
+    "perCase": [
+      {
+        "name": "curl_repeat",
+        "ms": 16.31
+      },
+      {
+        "name": "irm_pipe_long",
+        "ms": 14.49
+      },
+      {
+        "name": "disable_windows",
+        "ms": 13.29
+      },
+      {
+        "name": "save_chain",
+        "ms": 75.56
+      },
+      {
+        "name": "scriptblock_spaces",
+        "ms": 44.82
+      },
+      {
+        "name": "enc_480k",
+        "ms": 29.44
+      },
+      {
+        "name": "enc_8k_repeats",
+        "ms": 12.18
+      },
+      {
+        "name": "url_250k",
+        "ms": 4.3
+      },
+      {
+        "name": "dropbox_17k",
+        "ms": 14.55
+      },
+      {
+        "name": "bad_urls_58k",
+        "ms": 13.69
+      },
+      {
+        "name": "headings_60k",
+        "ms": 26.3
+      },
+      {
+        "name": "zip_releases_dots",
+        "ms": 7.88
+      },
+      {
+        "name": "backtick_cr",
+        "ms": 5.85
+      },
+      {
+        "name": "tilde_ls",
+        "ms": 7.12
+      },
+      {
+        "name": "url_trailing_dots",
+        "ms": 12.37
+      }
+    ]
+  }
+}
