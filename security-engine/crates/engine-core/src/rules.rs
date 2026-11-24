@@ -78,6 +78,8 @@ pub struct WeightsConfig {
     pub manifest_malicious_script: i32,
     pub manifest_autorun_task: i32,
     pub manifest_binary_decoy_tree: i32,
+    #[serde(default)]
+    pub pages_obfuscated_redirect: i32,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]

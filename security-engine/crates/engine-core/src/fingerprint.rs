@@ -1,5 +1,6 @@
 use crate::markdown::MarkdownLink;
 use crate::rules::CompiledRuleset;
+use pulldown_cmark::{Event, Parser, Tag, TagEnd};
 use regex::Regex;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -16,6 +17,8 @@ pub struct ReadmeTraits {
     pub archive_filehost_url: Option<String>,
     pub shortener_urls: Vec<String>,
     pub own_pages_lure: bool,
+    #[serde(default)]
+    pub pages_landing_candidate: bool,
 }
 
 fn heading_re() -> &'static Regex {
@@ -41,6 +44,95 @@ fn url_token_re() -> &'static Regex {
 fn download_word_re() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(r"(?i)\bdownload").unwrap())
+}
+
+fn setup_word_re() -> &'static Regex {
+    static RE: OnceLock<Regex> = OnceLock::new();
+    RE.get_or_init(|| Regex::new(r"(?i)\b(?:set[ -]?up|install(?:er|ation)?|downloads?)\b").unwrap())
+}
+
+fn is_pages_entry_link(raw: &str, host: &str, repo: &str) -> bool {
+    let Ok(url) = Url::parse(raw) else {
+        return false;
+    };
+    if !matches!(url.scheme(), "http" | "https")
+        || url.host_str() != Some(host)
+        || !url.username().is_empty()
+        || url.password().is_some()
+        || url.port().is_some()
+    {
+        return false;
+    }
+    let path = url.path();
+    if repo.eq_ignore_ascii_case(host) {
+        return matches!(path, "/" | "/index.html");
+    }
+    let mut segments = path.strip_prefix('/').unwrap_or(path).split('/');
+    segments.next().is_some_and(|name| name.eq_ignore_ascii_case(repo))
+        && matches!(segments.next(), None | Some("") | Some("index.html"))
+        && segments.next().is_none()
+}
+
+fn html_anchor_href(html: &str) -> Option<&str> {
+    let tag = html.trim_start().split_once('>')?.0;
+    if !tag.get(..2)?.eq_ignore_ascii_case("<a")
+        || !tag.as_bytes().get(2)?.is_ascii_whitespace()
+    {
+        return None;
+    }
+    crate::web::attributes(&tag[2..])
+        .find(|(key, _)| key.eq_ignore_ascii_case("href"))
+        .map(|(_, href)| href)
+}
+
+/// A setup/download link can be an unlabelled image button under a setup heading.
+/// Restrict context to its Markdown paragraph or section heading, ignoring fenced examples.
+fn links_to_pages_setup(text: &str, host: &str, repo: &str) -> bool {
+    if !setup_word_re().is_match(text) {
+        return false;
+    }
+    let mut section_setup = false;
+    let mut block_setup = false;
+    let mut block_link = false;
+    for event in Parser::new(text) {
+        match event {
+            Event::Start(Tag::Heading { .. }) => {
+                section_setup = false;
+                block_setup = false;
+                block_link = false;
+            }
+            Event::Start(Tag::Paragraph | Tag::Item) => {
+                block_setup = false;
+                block_link = false;
+            }
+            Event::Start(Tag::Link { dest_url, .. }) => {
+                block_link |= is_pages_entry_link(&dest_url, host, repo);
+            }
+            Event::Html(html) | Event::InlineHtml(html) => {
+                if html_anchor_href(&html).is_some_and(|href| is_pages_entry_link(href, host, repo)) {
+                    if section_setup {
+                        return true;
+                    }
+                    block_link = true;
+                }
+            }
+            Event::Text(label) | Event::Code(label) => {
+                if !label.starts_with("https://") && !label.starts_with("http://") {
+                    block_setup |= setup_word_re().is_match(&label);
+                }
+            }
+            Event::End(TagEnd::Heading(_)) => {
+                section_setup = block_setup;
+                if block_link && block_setup {
+                    return true;
+                }
+            }
+            Event::End(TagEnd::Paragraph | TagEnd::Item)
+                if block_link && (section_setup || block_setup) => return true,
+            _ => {}
+        }
+    }
+    false
 }
 
 fn archive_name_re() -> &'static Regex {
@@ -357,6 +449,8 @@ pub fn extract_traits(
     }
 
     let own_pages_lure = own_pages && download_word_re().is_match(text);
+    let pages_landing_candidate = own_pages && own_pages_host.as_deref().zip(name)
+        .is_some_and(|(host, repo)| !repo.is_empty() && links_to_pages_setup(text, host, repo));
     if own_pages_lure {
         lure = true;
     }
@@ -390,5 +484,6 @@ pub fn extract_traits(
         archive_filehost_url,
         shortener_urls: shortener_set.into_iter().collect(),
         own_pages_lure,
+        pages_landing_candidate,
     }
 }

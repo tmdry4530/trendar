@@ -24,14 +24,14 @@ test('Rust NAPI-RS 네이티브 엔진이 로드되고 외부 YAML 룰셋 메타
   assert.equal(isNativeLoaded(), true);
   const info = engineInfo();
   assert.equal(info.backend, 'rust-napi');
-  assert.equal(info.ruleVersion, 4);
-  assert.equal(info.rulesetId, 'trendar-default-v4');
+  assert.equal(info.ruleVersion, 5);
+  assert.equal(info.rulesetId, 'trendar-default-v5');
   assert.match(info.rulesetHash, /^[0-9a-f]{16}$/);
 });
 
 test('외부 YAML 룰셋 디렉터리 로드 및 잘못된 경로 에러 격리(Silent Failure 금지)', () => {
   const loaded = loadRulesDir(path.join(ROOT, 'rules'));
-  assert.equal(loaded.ruleVersion, 4);
+  assert.equal(loaded.ruleVersion, 5);
   assert.throws(() => loadRulesDir(path.join(ROOT, 'non-existent-rules-dir')), /failed to load ruleset/);
 });
 

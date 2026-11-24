@@ -1,8 +1,8 @@
-# Trendar Security Engine — Master Ruleset Configuration (v4)
+# Trendar Security Engine — Master Ruleset Configuration (v5)
 # 코드 재컴파일 없이 규칙·임계치·가중치를 조정할 수 있도록 외부화된 마스터 설정입니다.
 
-version: 4
-ruleset_id: "trendar-default-v4"
+version: 5
+ruleset_id: "trendar-default-v5"
 description: "Multi-layer static threat detection ruleset (AST + Lexer + Deobfuscation + Entropy + Metadata + SimHash)"
 
 includes:
@@ -57,3 +57,4 @@ scoring:
     manifest_malicious_script: 80
     manifest_autorun_task: 80
     manifest_binary_decoy_tree: 75
+    pages_obfuscated_redirect: 80

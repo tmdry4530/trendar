@@ -1,5 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import {
   classifyReadme, createReadmeScanner, fetchOwnerCreatedAt, fetchReadme, readmeTraits, NEW_ACCOUNT_DAYS, RULE_VERSION,
 } from '../src/services/readme-scan.js';
@@ -71,7 +72,7 @@ test('fetchReadme는 getReadme raw만 호출하고 404는 null, 그 밖의 오�
 const PUSHED = '2026-11-08T08:40:39Z';
 const SCANNED = new Date('2026-11-09T06:00:00Z');
 
-function scanner({ existing = [], readmes = {}, owners = {}, refreshClusters = async () => 0, minIntervalMs = 100 } = {}) {
+function scanner({ existing = [], readmes = {}, owners = {}, analyzeManifestAsync, refreshClusters = async () => 0, minIntervalMs = 100 } = {}) {
   const saved = [];
   const fetched = [];
   const ownerCalls = [];
@@ -83,6 +84,7 @@ function scanner({ existing = [], readmes = {}, owners = {}, refreshClusters = a
   };
   const instance = createReadmeScanner({
     model,
+    analyzeManifestAsync,
     fetchReadme: async (octokit, owner, name) => {
       fetched.push(`${owner}/${name}`);
       const value = readmes[`${owner}/${name}`];
@@ -102,6 +104,89 @@ function scanner({ existing = [], readmes = {}, owners = {}, refreshClusters = a
   });
   return { instance, saved, fetched, ownerCalls, warnings };
 }
+
+const pagesRepo = { github_id: 41, owner: 'Sample', name: 'project', pushed_at: PUSHED, language: 'HTML' };
+const setupLink = '### PowerShell Setup Button\n\n[![](files/button.png)](https://sample.github.io/project/)';
+
+async function scanPages(readme, files = {}, { existing = [], analyzeManifestAsync } = {}) {
+  const calls = [];
+  const { instance, saved, warnings } = scanner({ readmes: { 'Sample/project': readme }, existing, analyzeManifestAsync, minIntervalMs: 0 });
+  async function getContent(options) {
+    calls.push(options.path);
+    assert.equal(options.owner, 'Sample');
+    assert.equal(options.repo, 'project');
+    assert.equal(options.headers.accept, 'application/vnd.github.object+json');
+    assert.ok(options.request.signal instanceof AbortSignal);
+    const value = files[options.path];
+    if (value === undefined) throw Object.assign(new Error('missing'), { status: 404 });
+    if (value instanceof Error) throw value;
+    if (typeof value !== 'string') return { data: value };
+    const bytes = Buffer.from(value);
+    return { data: { type: 'file', encoding: 'base64', size: bytes.length, content: bytes.toString('base64') } };
+  }
+  const octokit = { rest: { repos: { getContent } } };
+  const result = await instance.scanRepos(octokit, [pagesRepo]);
+  return { result, saved, warnings, calls };
+}
+
+test('Pages 설치 링크에서 루트와 docs 진입 파일의 난독화된 외부 리디렉션을 탐지한다', async () => {
+  const page = readFileSync(new URL('../../benchmarks/fixtures/packed-download-page.txt', import.meta.url), 'utf8');
+  for (const path of ['index.html', 'docs/index.html']) {
+    const { saved, calls, result } = await scanPages(setupLink, { 'index.html': '<p>Project</p>', [path]: page });
+    assert.deepEqual(calls, path === 'index.html' ? [path] : ['index.html', path]);
+    assert.equal(result.malicious, 1);
+    assert.equal(saved[0].verdict, 'malicious');
+    assert.match(saved[0].evidence, /WEB-OBFUSCATED-DOWNLOAD-REDIRECT/);
+    assert.ok(saved[0].evidence.includes(path));
+  }
+});
+
+test('Pages 설치 링크와 정상·누락·상한 초과 진입 파일은 clean이다', async () => {
+  for (const files of [
+    {},
+    { 'index.html': '<p>Installation guide</p>', 'docs/index.html': '<p>Documentation</p>' },
+    { 'index.html': { type: 'file', size: 131073, encoding: 'none', content: '' } },
+  ]) {
+    const { saved, calls } = await scanPages(setupLink, files);
+    assert.deepEqual(calls, ['index.html', 'docs/index.html']);
+    assert.equal(saved[0].verdict, 'clean');
+    assert.equal(saved[0].evidence, null);
+  }
+});
+
+test('설치 문맥이 없거나 다른 저장소의 Pages이면 진입 파일을 조회하지 않는다', async () => {
+  for (const readme of [
+    '[Docs](https://sample.github.io/project/)',
+    setupLink.replace('/project/', '/other/'),
+    setupLink.replace('sample.github.io', 'elsewhere.github.io'),
+  ]) {
+    const { saved, calls } = await scanPages(readme);
+    assert.deepEqual(calls, []);
+    assert.equal(saved[0].verdict, 'clean');
+  }
+});
+
+test('Pages 조회 실패는 다시 검사할 수 있게 두고 기존 malicious 판정을 보존한다', async () => {
+  const unavailable = { 'docs/index.html': Object.assign(new Error('backend failure'), { status: 503 }) };
+  const fresh = await scanPages(setupLink, unavailable);
+  assert.equal(fresh.result.unknown, 1);
+  assert.equal(fresh.saved[0].verdict, 'unknown');
+  assert.equal(fresh.saved[0].repo_pushed_at, null);
+  const known = await scanPages(setupLink, unavailable, { existing: [
+    { github_id: pagesRepo.github_id, verdict: 'malicious', rule_version: RULE_VERSION - 1, repo_pushed_at: new Date(PUSHED) },
+  ] });
+  assert.deepEqual(known.saved, []);
+  assert.deepEqual(known.warnings, ['[readme-scan] github_id=41 status=503']);
+});
+
+test('Pages 분석기 오류는 격리하고 다시 검사한다', async () => {
+  const { saved, result } = await scanPages(setupLink, { 'index.html': '<p>Setup</p>' }, {
+    analyzeManifestAsync: async () => { throw new Error('test failure'); },
+  });
+  assert.equal(result.malicious, 1);
+  assert.equal(saved[0].evidence, 'analyzer_error_quarantine');
+  assert.equal(saved[0].repo_pushed_at, null);
+});
 
 test('판정이 없는 저장소를 검사해 판정·규칙 버전·push 시각·검사 시각을 저장하고 중복 github_id는 한 번만 검사한다', async () => {
   const { instance, saved, fetched } = scanner({ readmes: { 'bad/rufus': CLUSTER_README, 'ok/tool': '# tool' } });

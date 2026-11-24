@@ -87,6 +87,7 @@ function normalizeTraits(raw) {
     archiveFilehostUrl: raw.archiveFilehostUrl ?? null,
     shortenerUrls: Array.isArray(raw.shortenerUrls) ? raw.shortenerUrls : [],
     ownPagesLure: Boolean(raw.ownPagesLure),
+    pagesLandingCandidate: Boolean(raw.pagesLandingCandidate),
   };
 }
 
@@ -113,7 +114,7 @@ export function loadRulesDir(dir) {
 }
 
 /**
- * Synchronous full v4 analysis (Rust DFA + Markdown AST + Shell Lexer + Scoring + Traits).
+ * Synchronous full analysis (Rust DFA + Markdown AST + Shell Lexer + Scoring + Traits).
  * @param {string | null | undefined} text
  * @param {any} [meta]
  * @param {{ enableMultilingual?: boolean, enableMetadataScoring?: boolean }} [options]
@@ -137,7 +138,7 @@ export async function analyzeReadmeAsync(text, meta, options) {
 }
 
 /**
- * Full v4 classification (used by benchmarks and new callers).
+ * Full classification (used by benchmarks and new callers).
  * @param {string | null | undefined} text
  * @param {any} [meta]
  * @param {{ enableMultilingual?: boolean, enableMetadataScoring?: boolean }} [options]
@@ -179,11 +180,16 @@ export function evaluateClusters(candidates) {
 }
 
 /**
- * Opt-in static manifest & Git tree threat analysis (package.json, setup.py, .vscode/tasks.json, .csproj, decoy binaries).
- * Default OFF in the standard README scan pipeline; invoke explicitly when enabled.
- * @param {{ files?: Array<{ path: string, content: string }>, tree?: Array<{ path: string, size: number }> }} input
+ * Static analysis of repository files, Pages landing pages and Git tree metadata.
+ * @param {{ pagesHost?: string, files?: Array<{ path: string, content: string }>, tree?: Array<{ path: string, size: number }> }} input
  */
 export function analyzeManifest(input) {
   const json = loadNative().analyzeManifestJson(JSON.stringify(input ?? { files: [], tree: [] }));
+  return JSON.parse(json);
+}
+
+/** @param {Parameters<typeof analyzeManifest>[0]} input */
+export async function analyzeManifestAsync(input) {
+  const json = await loadNative().analyzeManifestJsonAsync(JSON.stringify(input));
   return JSON.parse(json);
 }
