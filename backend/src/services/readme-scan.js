@@ -1,8 +1,9 @@
 // @ts-check
 // I/O 및 오케스트레이션 어댑터 — 순수 정적 분석·룰 평가·지문 추출은 Rust NAPI-RS 엔진(security-engine.js)에 위임한다.
-// README 텍스트, 검색 응답 메타, 소유자 계정 생성일만 읽어 판정하며 링크·첨부·코드는 내려받거나 실행하지 않는다.
+// README와 저장소 안의 Pages 진입 파일은 텍스트로 검사한다. README 링크나 리디렉션 목적지에 접속하지 않는다.
 import {
   analyzeManifest,
+  analyzeManifestAsync,
   analyzeReadme,
   analyzeReadmeAsync,
   engineInfo,
@@ -15,11 +16,13 @@ export const RULE_VERSION = engineInfo().ruleVersion;
 export const NEW_ACCOUNT_DAYS = 90;
 
 const MAX_README_BYTES = 512 * 1024;
+const MAX_LANDING_BYTES = 128 * 1024;
+const PAGES_LANDING_PATHS = ['index.html', 'docs/index.html'];
 const MAX_EVIDENCE = 500;
 const CODELESS_MAX_SIZE_KB = 100;
 const DEFAULT_REQUEST_TIMEOUT_MS = 10_000;
 
-export { analyzeManifest, analyzeReadme, analyzeReadmeAsync, engineInfo, loadRulesDir, simhashDistance };
+export { analyzeManifest, analyzeManifestAsync, analyzeReadme, analyzeReadmeAsync, engineInfo, loadRulesDir, simhashDistance };
 
 function truncateUtf8Bytes(text, maxBytes) {
   if (Buffer.byteLength(text, 'utf8') <= maxBytes) return text;
@@ -43,7 +46,7 @@ function isCodeless(meta) {
 
 /**
  * 하위 호환 분류 API — 기존 계약({ verdict, evidence })을 엄격히 유지한다.
- * 전체 v4 리스크 스코어링·신호 목록·다국어 규칙은 `analyzeReadme` / `analyzeReadmeAsync`를 사용한다.
+ * 전체 리스크 스코어링·신호 목록·다국어 규칙은 `analyzeReadme` / `analyzeReadmeAsync`를 사용한다.
  * @param {string | null} text
  * @param {{ language?: string | null, forks?: number | null, size?: number | null, homepage?: string | null, description?: string | null, stars?: number | null }} [meta]
  * @param {{ enableMultilingual?: boolean, enableMetadataScoring?: boolean }} [options]
@@ -111,6 +114,26 @@ export async function fetchReadme(octokit, owner, name, { timeoutMs = DEFAULT_RE
   }
 }
 
+async function fetchPagesLanding(octokit, owner, repo, path) {
+  let data;
+  try {
+    // GitHub's object format omits file content above 1 MiB. Never follow download_url.
+    ({ data } = await octokit.rest.repos.getContent({
+      owner, repo, path, headers: { accept: 'application/vnd.github.object+json' },
+      request: { signal: AbortSignal.timeout(DEFAULT_REQUEST_TIMEOUT_MS) },
+    }));
+  } catch (error) {
+    if (/** @type {any} */ (error)?.status === 404) return null;
+    throw error;
+  }
+  if (data.type !== 'file' || data.submodule_git_url || data.size > MAX_LANDING_BYTES) return null;
+  if (data.encoding === 'base64' && typeof data.content === 'string' && data.content.length <= 2 * MAX_LANDING_BYTES) {
+    const bytes = Buffer.from(data.content, 'base64');
+    if (bytes.length === data.size) return bytes.toString('utf8');
+  }
+  throw Object.assign(new Error('Incomplete Pages file'), { code: 'PAGES_CONTENT_UNAVAILABLE' });
+}
+
 // 미끼 링크 규칙(D-015)에서만 부른다. 생성일을 읽을 수 없으면 조회 실패로 다룬다.
 export async function fetchOwnerCreatedAt(octokit, login, { timeoutMs = DEFAULT_REQUEST_TIMEOUT_MS } = {}) {
   const { data } = await withTimeout(
@@ -153,6 +176,7 @@ function isRateLimited(error) {
  *   fetchReadme?: typeof fetchReadme,
  *   fetchOwnerCreatedAt?: typeof fetchOwnerCreatedAt,
  *   analyzeReadmeAsync?: typeof analyzeReadmeAsync,
+ *   analyzeManifestAsync?: typeof analyzeManifestAsync,
  *   log?: Pick<Console, 'warn'>,
  *   now?: () => Date,
  *   concurrency?: number,
@@ -166,7 +190,7 @@ function isRateLimited(error) {
  */
 export function createReadmeScanner({
   model, fetchReadme: fetch = fetchReadme, fetchOwnerCreatedAt: fetchOwner = fetchOwnerCreatedAt,
-  analyzeReadmeAsync: analyze = analyzeReadmeAsync, log = console,
+  analyzeReadmeAsync: analyze = analyzeReadmeAsync, analyzeManifestAsync: analyzeLanding = analyzeManifestAsync, log = console,
   now = () => new Date(), concurrency = 4, minIntervalMs = 100, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   clock = Date.now, enableMultilingual = true, enableManifest = false, fetchManifest = null,
 }) {
@@ -212,6 +236,17 @@ export function createReadmeScanner({
       }
     }
 
+    // 분석기 예외는 격리하고 push 시각을 비워 다음 수집에서 다시 검사한다.
+    async function quarantine(id, error) {
+      log.warn(`[readme-scan] github_id=${id} analyze=${error?.code ?? error?.name ?? 'error'}`);
+      await model.upsertVerdict({
+        github_id: id, verdict: 'malicious', rule_version: RULE_VERSION, evidence: 'analyzer_error_quarantine',
+        repo_pushed_at: null, scanned_at: new Date(now()),
+      });
+      result.scanned++;
+      result.malicious++;
+    }
+
     async function scanOne([id, repo]) {
       if (!halted) await pace();
       if (halted) {
@@ -227,8 +262,6 @@ export function createReadmeScanner({
       }
 
       // Rust NAPI-RS AsyncTask로 비블로킹 분석 (분류 + 특성 + SimHash 단일 패스)
-      // 분석기 예외·패닉 시 fail-open(기존 clean 유지 또는 미판정 노출)을 막기 위해 즉시 격리(malicious)하고
-      // repo_pushed_at=null로 저장해 다음 스캔에서 자동 재검사한다.
       let report;
       try {
         report = await analyze(text, repo, {
@@ -236,18 +269,7 @@ export function createReadmeScanner({
           enableMetadataScoring: true,
         });
       } catch (error) {
-        const err = /** @type {any} */ (error);
-        log.warn(`[readme-scan] github_id=${id} analyze=${err?.code ?? err?.name ?? 'error'}`);
-        await model.upsertVerdict({
-          github_id: id,
-          verdict: 'malicious',
-          rule_version: RULE_VERSION,
-          evidence: 'analyzer_error_quarantine',
-          repo_pushed_at: null,
-          scanned_at: new Date(now()),
-        });
-        result.scanned++;
-        result.malicious++;
+        await quarantine(id, error);
         return;
       }
       let verdict = report.verdict;
@@ -292,6 +314,37 @@ export function createReadmeScanner({
         } catch (error) {
           const err = /** @type {any} */ (error);
           log.warn(`[readme-scan] github_id=${id} manifest=${err?.code ?? err?.status ?? 'error'}`);
+        }
+      }
+
+      if (verdict === 'clean' && traits.pagesLandingCandidate) {
+        for (const path of PAGES_LANDING_PATHS) {
+          if (!halted) await pace();
+          if (halted) {
+            result.skipped++;
+            return;
+          }
+          let content;
+          try {
+            content = await fetchPagesLanding(octokit, repo.owner, repo.name, path);
+          } catch (error) {
+            await recordFailure(id, error);
+            return;
+          }
+          if (!content) continue;
+          try {
+            const landing = await analyzeLanding({
+              pagesHost: `${repo.owner.toLowerCase()}.github.io`, files: [{ path, content }],
+            });
+            if (landing.verdict === 'malicious') {
+              verdict = 'malicious';
+              evidence = String(landing.evidence).slice(0, MAX_EVIDENCE);
+              break;
+            }
+          } catch (error) {
+            await quarantine(id, error);
+            return;
+          }
         }
       }
 

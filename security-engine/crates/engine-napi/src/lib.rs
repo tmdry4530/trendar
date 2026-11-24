@@ -57,6 +57,7 @@ pub struct JsReadmeTraits {
     pub archive_filehost_url: Option<String>,
     pub shortener_urls: Vec<String>,
     pub own_pages_lure: bool,
+    pub pages_landing_candidate: bool,
 }
 
 #[napi(object)]
@@ -140,6 +141,7 @@ fn convert_traits(t: ReadmeTraits) -> JsReadmeTraits {
         archive_filehost_url: t.archive_filehost_url,
         shortener_urls: t.shortener_urls,
         own_pages_lure: t.own_pages_lure,
+        pages_landing_candidate: t.pages_landing_candidate,
     }
 }
 
@@ -277,13 +279,43 @@ pub fn evaluate_clusters_json(candidates_json: String) -> Result<String> {
         .map_err(|e| Error::from_reason(format!("failed serializing cluster result: {e}")))
 }
 
-#[napi]
-pub fn analyze_manifest_json(input_json: String) -> Result<String> {
-    let input: ManifestInput = serde_json::from_str(&input_json)
+fn analyze_manifest_input(eng: &SecurityEngine, input_json: &str) -> Result<String> {
+    let input: ManifestInput = serde_json::from_str(input_json)
         .map_err(|e| Error::from_reason(format!("invalid manifest JSON: {e}")))?;
-    let eng = current_engine();
     let res = catch_unwind(AssertUnwindSafe(|| eng.analyze_manifest(&input)))
         .map_err(|_| Error::from_reason("internal panic isolated in analyze_manifest"))?;
     serde_json::to_string(&res)
         .map_err(|e| Error::from_reason(format!("failed serializing manifest report: {e}")))
+}
+
+#[napi]
+pub fn analyze_manifest_json(input_json: String) -> Result<String> {
+    analyze_manifest_input(&current_engine(), &input_json)
+}
+
+pub struct ManifestAsyncTask {
+    engine: Arc<SecurityEngine>,
+    input_json: String,
+}
+
+#[napi]
+impl Task for ManifestAsyncTask {
+    type Output = String;
+    type JsValue = String;
+
+    fn compute(&mut self) -> Result<Self::Output> {
+        analyze_manifest_input(&self.engine, &self.input_json)
+    }
+
+    fn resolve(&mut self, _env: Env, output: Self::Output) -> Result<Self::JsValue> {
+        Ok(output)
+    }
+}
+
+#[napi]
+pub fn analyze_manifest_json_async(input_json: String) -> AsyncTask<ManifestAsyncTask> {
+    AsyncTask::new(ManifestAsyncTask {
+        engine: current_engine(),
+        input_json,
+    })
 }

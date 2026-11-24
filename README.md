@@ -29,7 +29,7 @@ Trendar는 관심 키워드에 매칭되는 레포의 스타 수를 **6시간마
 - **멀티테넌트** — GitHub 로그인 기반. 검색어·레포·북마크가 **사용자별로 완전 격리**되고, 수집도 **각자의 OAuth 토큰**으로 실행되어 레이트리밋을 분산
 - **무료 이용** — 공개 피드는 로그인 없이 볼 수 있고, 로그인한 모든 계정에는 같은 한도가 적용된다(기본 수집 조건 50개·수동 수집 하루 100회, 한국 시간 자정 초기화). 신규 Pro 구독은 받지 않는다. 이전 구독이 있다면 `/account/billing`에서 상태를 확인하고 Paddle 고객 포털에서 자동 갱신을 해지하거나 영수증을 볼 수 있다.
 - **공개 트렌드** — 로그인 없이 볼 수 있는 서버 렌더 페이지(`/trending`, 언어·주제별 피드, 레포 페이지, 한국어 `/ko`). 서버 전용 토큰으로 모은 공개 풀을 하루 환산 증가 속도로 랭킹하고, 링크 미리보기 PNG·README 배지·동적 sitemap을 제공 ([공개 트렌드](#공개-트렌드) 참고)
-- **악성 저장소 제외** — 수집 때 README를 읽어, 원격 스크립트 즉시 실행 지시와 백신·실시간 보호 끄기 안내가 **함께** 있는 저장소, 같은 README를 여러 계정에 뿌리며 압축 파일을 받게 하는 캠페인, 신생 계정의 코드 없는 저장소가 파일호스팅 압축 파일로 유도하는 경우를 대시보드 급상승·성장률 상위와 공개 트렌드에서 숨긴다 ([악성 저장소 제외](#악성-저장소-제외) 참고)
+- **악성 저장소 제외** — 수집 때 README를 읽어, 원격 스크립트 즉시 실행 지시와 백신·실시간 보호 끄기 안내가 **함께** 있는 저장소, 설치 버튼이 연결한 GitHub Pages에서 난독화된 외부 다운로드 리디렉션이 확인된 저장소, 같은 README를 여러 계정에 뿌리며 압축 파일을 받게 하는 캠페인, 신생 계정의 코드 없는 저장소가 파일호스팅 압축 파일로 유도하는 경우를 대시보드 급상승·성장률 상위와 공개 트렌드에서 숨긴다 ([악성 저장소 제외](#악성-저장소-제외) 참고)
 - **급상승 알림 웹훅** — 수집이 끝날 때 대시보드 신생 급상승(상위 8개)에 새로 들어온 저장소를, 사용자가 등록한 URL로 서명해 보낸다. Discord·Slack 수신 주소는 그 서비스가 읽는 형식으로 보낸다 ([급상승 알림 웹훅](#급상승-알림-웹훅) 참고)
 
 ---
@@ -332,11 +332,11 @@ node src/etl/public-pipeline.js    # 피드 33개 기준 Search 33회 × 2.1초 
 
 `RISING_WINDOW_DAYS`는 대시보드와 공개 수집·노출 창이 함께 쓴다. 공개 피드를 스펙대로 15일 창으로 운영하려면 이 값을 15로 둔다(미설정 시 15).
 
-### 악성 저장소 제외 (Rust 보안 분석 엔진 v4)
+### 악성 저장소 제외
 
 공개 수집과 사용자 수집은 처리한 저장소의 README를 GitHub API로 읽어 판정하고 `repo_security_verdicts`(github_id 기준, 대시보드·공개 풀 공유)에 남긴다. README 텍스트, 검색 응답에 이미 있는 메타(`language`·`forks`·`size`·`homepage`·`description`·`stars`), 아래 미끼 링크 규칙에서만 조회하는 소유자 계정 생성일(실행 단위 캐싱)을 쓰며 링크·첨부·Releases 파일은 내려받거나 실행하지 않는다.
 
-핵심 정적 분석 엔진은 **Rust (`security-engine/`)**로 구현되어 **NAPI-RS 네이티브 바인딩**(`backend/src/services/security-engine.js`)과 **독립 CLI**(`trendar-scan`)로 제공되며, 현재 규칙은 4판(`rule_version = 4`, 외부 YAML 룰셋 `rules/*.yaml`)이다. Rust DFA 정규식 엔진과 `AhoCorasick` 프리필터로 ReDoS를 원천 차단하며, Express 서버에서는 NAPI-RS `AsyncTask`로 비블로킹 실행된다. 숨기는 근거는 다음과 같다.
+핵심 정적 분석 엔진은 **Rust (`security-engine/`)**로 구현되어 **NAPI-RS 네이티브 바인딩**(`backend/src/services/security-engine.js`)과 **독립 CLI**(`trendar-scan`)로 제공되며, 현재 규칙은 5판(`rule_version = 5`, 외부 YAML 룰셋 `rules/*.yaml`)이다. Rust DFA 정규식 엔진과 `AhoCorasick` 프리필터로 ReDoS를 원천 차단하며, Express 서버에서는 NAPI-RS `AsyncTask`로 비블로킹 실행된다. 숨기는 근거는 다음과 같다.
 
 - **malicious — README 및 우회 방어 규칙**: 원격 실행 신호와 보호 해제 안내가 **함께** 있거나, 난독화·메타데이터 미끼 조합이 임계치(`score >= 70`)를 넘을 때.
   - **정규화·난독화 해제**: UTF-8 바이트 512KB 상한, HTML 주석(`<!-- ... -->`) 제거(디코더 패딩 DoS 방어), 제로폭 문자(`\u200B` 등) 제거, 혼합 스크립트 키릴/그리스 호모글리프 정규화, PowerShell 인라인 백틱(``i`rm``·``i`ex``)·문자열 결합(`"i"+"ex"`)·포맷 연산자(`-f`) 상수 폴딩, 코드블록 내 변수 URL 추적(`$u="https://..."; irm $u | iex`).
@@ -344,6 +344,7 @@ node src/etl/public-pipeline.js    # 피드 33개 기준 Search 33회 × 2.1초 
   - **보호 해제 안내**: 영어 문구·Defender 중지 명령(`Set-MpPreference`, `sc stop WinDefend`, 레지스트리) + 부정어 가드를 갖춘 다국어(한·중·러·스·포) 규칙. 예외어 스머글링(`"Disable Defender instead of adding an exclusion"`)을 차단하고, 병렬 부정(`"Never disable X or turn off Y"`), 상태 서술(`"disabled only in the screenshot VM"`), 블루팀/보안 연구 문서(MITRE ATT&CK·CVE·Sigma/YARA + 실제 소스 코드)는 오탐에서 보호한다.
 - **malicious — 미끼 링크·메타데이터 규칙**:
   - README(Markdown 참조형 링크 `[Setup.zip][1]` AST 해결 포함) 또는 저장소 `homepage`에 파일호스팅 압축·실행 파일 링크가 있고 코드 없는 저장소이며, 신생 소유자 계정(90일 이내)이거나 설명/이름에 크랙 미끼·브랜드 사칭(Typosquatting)이 동반될 때.
+- **GitHub Pages 설치·다운로드 링크**가 같은 저장소의 프로젝트 페이지를 가리키면, 수집기가 기본 브랜치의 `index.html`과 `docs/index.html`을 GitHub API로 읽는다(파일당 최대 128 KiB). 숨긴 데이터 조각을 복원해 문서를 다시 쓰고, 복원된 다운로드 화면에서 외부 사이트로 이동시키는 패턴을 `WEB-OBFUSCATED-DOWNLOAD-REDIRECT`로 기록한다. 검사 중에는 페이지를 열거나 스크립트를 실행하지 않는다.
 - **군집 표시(`cluster_hidden`)**:
   - 서로 다른 소유자 3명 이상이 미끼 표시가 있는 같거나 거의 같은 README를 쓸 때 숨긴다: 정확 해시(`text_key`, `skeleton_key`) + **64-bit SimHash 퍼지 군집**(Hamming 거리 ≤ 5, Union-Find 연결 요소)으로 주석/버전 태그 변형 캠페인까지 포착한다.
   - **군집 오염 방어(원본 보호)**: 실제 코드·포크(≥5)·이력(≥30일)이 검증된 원본 저장소는 공격자가 README를 복제해도 군집 숨김에서 보호한다.
@@ -365,7 +366,7 @@ npm run build:engine      # security-engine/ release 빌드 → backend/native/t
 
 # 2) 테스트 및 타입 검사
 npm run test:engine       # Rust core 단위 테스트 (cargo test)
-npm test                  # 백엔드 전체 테스트 (452건: 기존 444건 + Rust v4 보안 엔진 8건)
+npm test                  # 보안 수집기·네이티브 엔진 연동을 포함한 백엔드 전체 테스트
 npm run typecheck         # TypeScript 타입 검사
 
 # 3) 벤치마크 (Golden Suite + 실표본 3,595건 + 512KB 병리적 스트레스)

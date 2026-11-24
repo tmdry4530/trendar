@@ -23,6 +23,9 @@ pub struct ManifestInput {
     pub files: Vec<ManifestFile>,
     #[serde(default)]
     pub tree: Vec<TreeEntry>,
+    /// Expected host of a GitHub Pages setup/download link for this repository.
+    #[serde(default, rename = "pagesHost", alias = "pages_host")]
+    pub pages_host: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -161,16 +164,45 @@ fn analyze_git_tree(tree: &[TreeEntry], rules: &CompiledRuleset, signals: &mut V
     0
 }
 
-/// Opt-in static analysis for repository manifests (`package.json`, `setup.py`, `.vscode/tasks.json`,
-/// `.csproj`) and Git Trees. Strictly zero code execution (pure text/JSON/metadata parsing).
+fn github_pages_host(host: &str) -> Option<String> {
+    if host.len() > 63 + ".github.io".len() {
+        return None;
+    }
+    let host = host.to_ascii_lowercase();
+    let owner = host.strip_suffix(".github.io")?;
+    if owner.is_empty() || owner.starts_with('-') || owner.ends_with('-')
+        || !owner.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'-')
+    {
+        return None;
+    }
+    Some(host)
+}
+
+/// Opt-in static analysis for repository manifests, Git trees, and README-linked Pages entry points.
 pub fn analyze_manifest(input: &ManifestInput, rules: &CompiledRuleset) -> ManifestReport {
     let mut signals = Vec::new();
     let mut score = 0i32;
+    let mut pages_host = input.pages_host.as_deref().and_then(github_pages_host);
 
     for file in &input.files {
         let lower_path = file.path.to_lowercase();
         let capped = crate::normalize::truncate_utf8_bytes(&file.content, rules.limits.max_readme_bytes);
-        if lower_path == "package.json" || lower_path.ends_with("/package.json") {
+        if matches!(file.path.as_str(), "index.html" | "docs/index.html") {
+            let weight = rules.scoring.weights.pages_obfuscated_redirect;
+            if let Some(host) = pages_host.as_deref().filter(|_| weight > 0) {
+                if let Some(detail) = crate::web::analyze_web_landing(capped, host) {
+                    score += weight;
+                    signals.push(SignalHit {
+                        rule_id: "WEB-OBFUSCATED-DOWNLOAD-REDIRECT".into(),
+                        category: "web_landing".into(),
+                        weight,
+                        detail: format!("{}: {detail}", file.path),
+                    });
+                    // Duplicate entry points for one landing page count as one signal.
+                    pages_host = None;
+                }
+            }
+        } else if lower_path == "package.json" || lower_path.ends_with("/package.json") {
             score += analyze_package_json(&file.path, capped, rules, &mut signals);
         } else if lower_path.ends_with(".vscode/tasks.json") {
             score += analyze_vscode_tasks(&file.path, capped, rules, &mut signals);
