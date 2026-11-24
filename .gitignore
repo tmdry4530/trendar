@@ -14,5 +14,6 @@ backend/native/
 .DS_Store
 Thumbs.db
 
-# docs (local-only, not tracked in repo)
+# docs & local agent specs (local-only, not tracked in repo)
 docs/
+.claude/
