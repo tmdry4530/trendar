@@ -1,8 +1,19 @@
 // test/pipeline.test.js — ETL 파이프라인(createEtlRunner) 검증(스텁 주입, DB·네트워크 불필요)
-import { test } from 'node:test';
+import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { createEtlRunner, buildSlices } from '../src/etl/pipeline.js';
 import { normalizeRepo, computeDelta } from '../src/etl/transform.js';
+
+// pipeline.js가 dotenv/config를 로드하므로 로컬 .env의 ETL_MIN_STARS가 단위 테스트에 누수되지 않게 격리한다.
+let savedEtlMinStars;
+before(() => {
+  savedEtlMinStars = process.env.ETL_MIN_STARS;
+  delete process.env.ETL_MIN_STARS;
+});
+after(() => {
+  if (savedEtlMinStars === undefined) delete process.env.ETL_MIN_STARS;
+  else process.env.ETL_MIN_STARS = savedEtlMinStars;
+});
 
 function makeUsers({ byId = {}, all = [] } = {}) {
   const calls = { setTokenInvalid: [], updateEtlResult: [] };

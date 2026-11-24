@@ -1,0 +1,88 @@
+# Campaign Lures, Filehost Domains, Shorteners, Crack Keywords, and Brand Typosquatting
+
+archive_extensions:
+  - zip
+  - rar
+  - 7z
+  - exe
+  - msi
+  - scr
+  - dmg
+  - pkg
+  - apk
+
+# Pure file-sharing hosts (subdomain-inclusive)
+filehost_domains:
+  - dropbox.com
+  - dropboxusercontent.com
+  - mega.nz
+  - mega.co.nz
+  - mediafire.com
+  - gofile.io
+  - pixeldrain.com
+  - pixeldrain.net
+  - drive.google.com
+  - 1drv.ms
+  - onedrive.live.com
+  - sendspace.com
+  - catbox.moe
+  - transfer.sh
+  - anonfiles.com
+  - krakenfiles.com
+  - workupload.com
+  - qiwi.gg
+  - buzzheavier.com
+  - fileditch.com
+  - upload.ee
+  - dosya.tc
+
+# URL shorteners (weak score contribution only; never standalone malicious)
+shortener_domains:
+  - bit.ly
+  - tinyurl.com
+  - cutt.ly
+  - rb.gy
+  - is.gd
+  - rebrand.ly
+  - shorturl.at
+  - tiny.cc
+
+# High-confidence crack/piracy lure phrases in repo description or README
+crack_lure_phrases:
+  - "pre-activated"
+  - "preactivated"
+  - "free activation"
+  - "full version crack"
+  - "cracked installer"
+  - "license bypass"
+  - "hwid bypass"
+  - "keygen"
+  - "robux generator"
+  - "seed phrase generator"
+  - "seedphrasegenerator"
+  - "trainer tool"
+  - "executor for pc bypass"
+
+# Frequently impersonated commercial / trending software brands for Typosquatting & impersonation detection
+brand_targets:
+  - adobe-acrobat-pro
+  - adobe-photoshop
+  - adobe-premiere-pro
+  - adobe-after-effects
+  - adobe-substance-3d
+  - autodesk-3ds-max
+  - solidworks-cad
+  - cinema-4d
+  - manus-ai
+  - ai-manus
+  - github-copilot-app
+  - iobit-driver-booster
+  - easeus-partition-master
+  - wondershare-recoverit
+  - aomei-backupper
+  - passfab-unlocker
+  - windows-defender
+  - fl-studio
+  - ableton-live
+  - capcut-for-windows
+  - iptv-player

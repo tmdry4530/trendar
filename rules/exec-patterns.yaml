@@ -1,0 +1,118 @@
+# Remote Execution, LOLBins, Interpreters, Save-and-Run, and Encoded Payload Rules
+# All regexes are compiled by Rust's finite-automata DFA engine (guaranteed O(n), ReDoS-immune).
+
+fetch_tools:
+  - irm
+  - iwr
+  - invoke-restmethod
+  - invoke-webrequest
+  - curl
+  - wget
+
+save_tools:
+  - curl
+  - wget
+  - irm
+  - iwr
+  - invoke-restmethod
+  - invoke-webrequest
+  - certutil
+  - bitsadmin
+  - start-bitstransfer
+  - downloadfile
+
+pipe_interpreters:
+  powershell:
+    - iex
+    - invoke-expression
+    - pwsh
+    - powershell
+  shell:
+    - sh
+    - bash
+    - zsh
+    - dash
+    - ksh
+  scripting:
+    - python
+    - python3
+    - perl
+    - ruby
+    - node
+
+runners:
+  - powershell
+  - pwsh
+  - cmd
+  - wscript
+  - cscript
+  - msiexec
+  - sh
+  - bash
+  - zsh
+  - dash
+  - source
+  - "."
+  - start
+  - start-process
+  - "&"
+  - python
+  - python3
+  - perl
+  - ruby
+  - node
+
+inert_commands:
+  - echo
+  - printf
+  - rem
+  - write-host
+  - write-output
+  - true
+  - false
+  - ":"
+
+wrappers:
+  - sudo
+  - doas
+  - env
+  - nohup
+  - time
+
+readers:
+  - cat
+  - type
+  - get-content
+  - gc
+  - more
+  - less
+  - head
+  - tail
+  - grep
+  - select-string
+
+lolbin_patterns:
+  - id: "EXEC-LOLBIN-MSHTA"
+    description: "mshta remote HTA or inline script execution"
+    pattern: '(?i)\bmshta(?:\.exe)?["'']?\s+["'']?(?:https?://|(?:javascript|vbscript):[^\n]{0,200}https?://)'
+    weight: 45
+  - id: "EXEC-LOLBIN-REGSVR32"
+    description: "regsvr32 Squiblydoo remote SCT execution"
+    pattern: '(?i)\bregsvr32(?:\.exe)?\b[^\n]{0,160}/i:https?://[^\s"'']+'
+    weight: 45
+  - id: "EXEC-LOLBIN-RUNDLL32-JS"
+    description: "rundll32 remote javascript/mshtml execution"
+    pattern: '(?i)\brundll32(?:\.exe)?\b[^\n]{0,120}(?:javascript:|mshtml,RunHTMLApplication)[^\n]{0,200}https?://'
+    weight: 45
+  - id: "EXEC-LOLBIN-WMIC-XSL"
+    description: "wmic remote XSL execution"
+    pattern: '(?i)\bwmic(?:\.exe)?\b[^\n]{0,120}/format:["'']?https?://[^\s"'']+'
+    weight: 45
+  - id: "EXEC-PYTHON-INLINE-REMOTE"
+    description: "python -c inline remote download and exec"
+    pattern: '(?i)\bpython3?\b[^\n]{0,60}-c\s+["''][^\n"'']*(?:urllib|requests\.get|http\.client)[^\n"'']*(?:exec|eval)\s*\('
+    weight: 45
+  - id: "EXEC-NODE-INLINE-REMOTE"
+    description: "node -e inline remote fetch and eval"
+    pattern: '(?i)\bnode(?:\.exe)?\b[^\n]{0,60}-e\s+["''][^\n"'']*(?:fetch|https?\.get)[^\n"'']*(?:eval|Function|execSync)\s*\('
+    weight: 45

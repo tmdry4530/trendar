@@ -332,34 +332,61 @@ node src/etl/public-pipeline.js    # 피드 33개 기준 Search 33회 × 2.1초 
 
 `RISING_WINDOW_DAYS`는 대시보드와 공개 수집·노출 창이 함께 쓴다. 공개 피드를 스펙대로 15일 창으로 운영하려면 이 값을 15로 둔다(미설정 시 15).
 
-### 악성 저장소 제외
+### 악성 저장소 제외 (Rust 보안 분석 엔진 v4)
 
-공개 수집과 사용자 수집은 처리한 저장소의 README를 GitHub API로 읽어 판정하고 `repo_security_verdicts`(github_id 기준, 대시보드·공개 풀 공유)에 남긴다. README 텍스트, 검색 응답에 이미 있는 메타(language·forks·size), 아래 미끼 링크 규칙에서만 조회하는 소유자 계정 생성일을 쓰며 링크·첨부·Releases 파일은 내려받거나 실행하지 않는다. 현재 규칙은 3판(`rule_version = 3`)이다. 숨기는 근거는 세 가지다.
+공개 수집과 사용자 수집은 처리한 저장소의 README를 GitHub API로 읽어 판정하고 `repo_security_verdicts`(github_id 기준, 대시보드·공개 풀 공유)에 남긴다. README 텍스트, 검색 응답에 이미 있는 메타(`language`·`forks`·`size`·`homepage`·`description`·`stars`), 아래 미끼 링크 규칙에서만 조회하는 소유자 계정 생성일(실행 단위 캐싱)을 쓰며 링크·첨부·Releases 파일은 내려받거나 실행하지 않는다.
 
-- **malicious — README 단독 규칙**: README에 아래 두 신호가 **둘 다** 있을 때만. 2026-11 공개 피드에 올라온 가짜 크랙·치트 저장소 군집(`windows-defender.cc` 스크립트 실행 + 실시간 보호 중지)이 기준 사례다.
-  - **실행 지시**: 원격 스크립트를 받아 바로 실행하는 명령. 파이프(`irm … | iex`, `irm … | &(gcm i*x)`, `curl … | sh`), 저장 후 실행(`curl … > run.ps1 && powershell -File run.ps1`, 같은 코드블록의 다음 3줄 안에서 실행하는 경우 포함), 치환(`bash <(curl …)`, `sh -c "$(curl …)"`, `[scriptblock]::Create((irm …))`), `mshta https://…`, 그리고 `powershell -enc <base64>`를 풀었을 때 본문에 위 형태가 있는 경우.
-  - **보호 해제 안내**: Windows Defender·실시간 보호·백신을 끄거나 일시 중지하라는 영어 문구와 명령(`Set-MpPreference -Disable…`, `sc stop WinDefend`, `DisableAntiSpyware` 레지스트리 값 1). 보호 대상을 일반 명사(security software·firewall 등)로만 쓴 명령형 문구는 코드 없는 저장소(language 없음, forks 0, size 100KB 이하)일 때만 인정한다. 영어가 아닌 문구는 부정·금지 표현을 가려낼 수 없어 판정에 쓰지 않는다.
-- **malicious — 미끼 링크 규칙**: 실행 명령 없이 압축 파일을 받게 하는 배포형 캠페인(2026-11 `manus--ai`·`ai--manus` 등)을 위한 규칙이다. 다음 세 조건이 **모두** 맞아야 한다.
-  - README에 파일호스팅(Dropbox·MEGA·MediaFire·Google Drive·OneDrive·gofile·pixeldrain 등) 링크가 있다. 그 링크의 경로가 압축·실행 파일(zip·rar·7z·exe·msi·scr·dmg·pkg·apk)로 끝나거나, 같은 줄(링크 텍스트 포함)에 그런 파일 이름이 있어야 한다. 경로·줄에 파일 이름이 없는 링크(파일 이름 없는 MEGA 폴더 등)와 단축 URL은 해당하지 않는다.
-  - 코드 없는 저장소다.
-  - 소유자 계정이 생성된 지 90일 이내다.
-  - 소유자 계정 조회는 앞의 두 조건이 맞는 저장소에만 1번 한다. 근거에는 링크와 계정 생성일이 남는다.
-- **군집 표시(`cluster_hidden`)**: 같은 README를 여러 계정에 뿌리는 캠페인(2026-11 `IPTV_Player2.0` 70개, `blender-ai-copilot-*` 등)을 위한 표시다.
-  - 조건: 서로 다른 소유자 3명 이상이 같은 README를 쓰고, 그 README에 미끼 표시가 있으면 모두 숨긴다.
-  - 같은 README: 소유자·저장소 이름을 지우고 글자·숫자만 남긴 본문이 300자 이상이면서 같다.
-  - 거의 같은 README: 첫 제목을 뺀 Markdown 제목 순서(8개 이상)가 같다.
-  - 미끼 표시: 압축·실행 파일 링크, 파일호스팅 링크, 한 줄에 Releases와 그런 파일 이름이 함께 적힌 경우, 또는 소유자 자신의 GitHub Pages(`<소유자>.github.io`)로 링크하면서 다운로드를 안내하는 경우(2026-11 `*-desktop` 캠페인).
-  - 미끼 표시가 없는 같은 README(프레임워크 기본 README, 내려받기 유도가 없는 홍보 글)는 숨기지 않는다.
-  - 판정을 마칠 때마다 저장된 판정 전체에서 다시 계산한다. 그래서 군집이 해체되면(구성원 README가 바뀌어 재검사) 다음 수집에서 다시 보인다.
-- **clean** — 위 어느 것에도 해당하지 않음. 정상 설치 안내(`irm https://get.scoop.sh | iex` 등), 백신 예외 등록 안내, SmartScreen 통과 안내, 부정문("끄지 마세요"), 스타 급증, 코드 없는 저장소라는 사실, 압축 파일 다운로드 링크 하나만으로는 숨기지 않는다.
-- **unknown** — 처음 검사할 때 README나 (미끼 링크 규칙의) 소유자 계정 조회가 실패함. 노출되고 다음 수집에서 다시 검사한다. 이미 판정이 있으면 조회 실패 시 기존 판정을 유지한다.
+핵심 정적 분석 엔진은 **Rust (`security-engine/`)**로 구현되어 **NAPI-RS 네이티브 바인딩**(`backend/src/services/security-engine.js`)과 **독립 CLI**(`trendar-scan`)로 제공되며, 현재 규칙은 4판(`rule_version = 4`, 외부 YAML 룰셋 `rules/*.yaml`)이다. Rust DFA 정규식 엔진과 `AhoCorasick` 프리필터로 ReDoS를 원천 차단하며, Express 서버에서는 NAPI-RS `AsyncTask`로 비블로킹 실행된다. 숨기는 근거는 다음과 같다.
 
-판정이 없거나 `unknown`이거나 저장소 `pushed_at`·규칙 버전이 바뀐 경우에만 README를 다시 읽는다. 버전 3 배포 뒤 첫 수집에서 판정된 저장소 전체를 한 번 다시 읽는다. `malicious`와 `cluster_hidden = 1`은 대시보드 신생 급상승·성장률 상위, 공개 랜딩·피드·OG·sitemap·순위 기록에서 빠지고, 레포 페이지·레포 OG는 404, 배지는 중립으로 응답한다. 행·스냅샷은 지우지 않으므로 README가 고쳐져 재검사에서 `clean`이 되거나 군집이 해체되면 다음 수집 뒤(공개 페이지는 서버 캐시 최대 10분, 배지는 HTTP 캐시 최대 1시간) 다시 노출된다. 판정 근거는 운영자만 DB에서 본다.
+- **malicious — README 및 우회 방어 규칙**: 원격 실행 신호와 보호 해제 안내가 **함께** 있거나, 난독화·메타데이터 미끼 조합이 임계치(`score >= 70`)를 넘을 때.
+  - **정규화·난독화 해제**: UTF-8 바이트 512KB 상한, HTML 주석(`<!-- ... -->`) 제거(디코더 패딩 DoS 방어), 제로폭 문자(`\u200B` 등) 제거, 혼합 스크립트 키릴/그리스 호모글리프 정규화, PowerShell 인라인 백틱(``i`rm``·``i`ex``)·문자열 결합(`"i"+"ex"`)·포맷 연산자(`-f`) 상수 폴딩, 코드블록 내 변수 URL 추적(`$u="https://..."; irm $u | iex`).
+  - **실행 지시**: 파이프(`irm … | iex`, `&(gcm|gal i*x)`, `curl … | sh/python3/pwsh/node/perl/ruby`), 저장 후 실행(빈 줄·주석을 제외한 실행 명령 기준 다음 3줄 이내), 치환(`bash <(curl …)`, `[scriptblock]::Create(…)`), LOLBins(`mshta`, `regsvr32 /i:https://…`, `rundll32`, `wmic`, 인라인 `python -c`·`node -e`), 다중 디코더(PowerShell `-enc` 탭 포함 UTF-16LE/UTF-8, `FromBase64String`, 셸 `base64 -d | sh`, `xxd -r -p | sh`), 코드블록 Shannon Entropy 검사.
+  - **보호 해제 안내**: 영어 문구·Defender 중지 명령(`Set-MpPreference`, `sc stop WinDefend`, 레지스트리) + 부정어 가드를 갖춘 다국어(한·중·러·스·포) 규칙. 예외어 스머글링(`"Disable Defender instead of adding an exclusion"`)을 차단하고, 병렬 부정(`"Never disable X or turn off Y"`), 상태 서술(`"disabled only in the screenshot VM"`), 블루팀/보안 연구 문서(MITRE ATT&CK·CVE·Sigma/YARA + 실제 소스 코드)는 오탐에서 보호한다.
+- **malicious — 미끼 링크·메타데이터 규칙**:
+  - README(Markdown 참조형 링크 `[Setup.zip][1]` AST 해결 포함) 또는 저장소 `homepage`에 파일호스팅 압축·실행 파일 링크가 있고 코드 없는 저장소이며, 신생 소유자 계정(90일 이내)이거나 설명/이름에 크랙 미끼·브랜드 사칭(Typosquatting)이 동반될 때.
+- **군집 표시(`cluster_hidden`)**:
+  - 서로 다른 소유자 3명 이상이 미끼 표시가 있는 같거나 거의 같은 README를 쓸 때 숨긴다: 정확 해시(`text_key`, `skeleton_key`) + **64-bit SimHash 퍼지 군집**(Hamming 거리 ≤ 5, Union-Find 연결 요소)으로 주석/버전 태그 변형 캠페인까지 포착한다.
+  - **군집 오염 방어(원본 보호)**: 실제 코드·포크(≥5)·이력(≥30일)이 검증된 원본 저장소는 공격자가 README를 복제해도 군집 숨김에서 보호한다.
+- **Opt-in 매니페스트 정적 분석 (기본 OFF)**:
+  - `analyzeManifest({ files, tree })` 또는 `trendar-scan scan-manifest <input.json>`으로 명시 호출 시 `package.json` 라이프사이클 훅(`preinstall`/`postinstall`), `.vscode/tasks.json`(`runOn: folderOpen`), `setup.py` `cmdclass`, `.csproj` 빌드 이벤트, 소스 없는 바이너리 미끼 트리를 정적 검사한다. 기본 README 수집 파이프라인에는 꺼져 있다.
+- **clean / unknown**: 기존과 동일. 판정이 없거나 `unknown`·`pushed_at`·`rule_version`이 바뀌면 재검사한다.
 
 ```sql
 SELECT github_id, verdict, rule_version, evidence, owner_login, cluster_hidden, scanned_at
 FROM repo_security_verdicts WHERE verdict = 'malicious' OR cluster_hidden = 1 ORDER BY scanned_at DESC;
 ```
+
+#### 보안 엔진 빌드 · 테스트 · 벤치마크 · 신규 룰 추가 가이드
+
+```bash
+# 1) Rust 엔진 빌드 및 Node NAPI-RS 네이티브 애드온 + CLI 설치 (사전 요구: Rust 1.88+, Cargo)
+cd backend
+npm run build:engine      # security-engine/ release 빌드 → backend/native/trendar_engine.node & trendar-scan
+
+# 2) 테스트 및 타입 검사
+npm run test:engine       # Rust core 단위 테스트 (cargo test)
+npm test                  # 백엔드 전체 테스트 (452건: 기존 444건 + Rust v4 보안 엔진 8건)
+npm run typecheck         # TypeScript 타입 검사
+
+# 3) 벤치마크 (Golden Suite + 실표본 3,595건 + 512KB 병리적 스트레스)
+npm run bench:security
+
+# 4) 독립 CLI 사용 (Rayon 멀티코어 병렬 스캔)
+./native/trendar-scan validate-rules --rules ../rules
+./native/trendar-scan scan-file path/to/README.md --owner bot --name app --size 5 --forks 0 --rules ../rules
+./native/trendar-scan scan-dir path/to/readmes_dir --rules ../rules
+./native/trendar-scan scan-manifest path/to/manifest-input.json --rules ../rules
+```
+
+**신규 탐지 룰 추가 방법 (재컴파일 불필요)**:
+1. `rules/` 디렉터리의 YAML 파일을 편집한다:
+   - `rules/ruleset.yaml`: 규칙 버전(`version`), 임계치(`malicious_threshold`), 신호별 가중치(`weights`)
+   - `rules/exec-patterns.yaml`: LOLBins·실행기·인터프리터 정규식 패턴
+   - `rules/protection-off.yaml`: 보호 해제 문구·다국어 규칙·보안 연구 문맥 감점 패턴
+   - `rules/domains-and-lures.yaml`: 파일호스팅 도메인, 단축 URL, 크랙 미끼 문구, 사칭 브랜드 목록
+   - `rules/manifest-threats.yaml`: Opt-in 매니페스트/Git 트리 정적 룰
+2. `./native/trendar-scan validate-rules --rules ../rules`로 문법·정규식 컴파일을 사전 검증한다(Rust `regex` DFA 검증 통과 필수).
+3. 서버 기동 시 `TRENDAR_RULES_DIR=/app/rules`(기본값: 레포 루트 `rules/`)에서 외부 YAML을 로드하며, 런타임에서도 `loadRulesDir(dir)`로 교체할 수 있다. `version`을 올리면 다음 수집에서 기존 저장소가 자동 재검사된다.
 
 ### README 배지
 
@@ -433,15 +460,19 @@ docker stop trendar-public-smoke
 
 ```
 trendar/
-├── db/          # schema.sql (MySQL) · schema.dbml (dbdiagram.io)
-├── shared/      # api-types.ts — 백엔드·프론트 공용 API 계약 타입 (타입 전용)
-├── backend/     # Express REST API · GitHub OAuth · ETL 파이프라인 · 공개 트렌드 SSR · node:test
-│   ├── src/     # routes · controllers · models · middleware · services · etl · utils · views(공개 HTML) · config/public-feeds.js
-│   ├── scripts/ # public-smoke.mjs (npm run smoke:public)
-│   └── assets/fonts/  # OG 이미지용 IBM Plex 폰트 (OFL)
-└── frontend/    # React + Vite + TypeScript SPA (로그인 + 4 화면)
-    ├── src/     # pages · components · api · auth · lib · styles
-    └── public/  # robots.txt · llms.txt · og-v2.png (sitemap.xml은 백엔드가 동적 생성)
+├── rules/           # 외부화 YAML 보안 탐지 룰셋 (ruleset · exec · protection-off · domains · manifest)
+├── security-engine/ # Rust 정적 보안 분석 워크스페이스 (engine-core · engine-napi · engine-cli)
+├── benchmarks/      # Golden Test Suite(fixtures/golden.json) · JS vs Rust 벤치마크 러너
+├── db/              # schema.sql (MySQL) · schema.dbml (dbdiagram.io)
+├── shared/          # api-types.ts — 백엔드·프론트 공용 API 계약 타입 (타입 전용)
+├── backend/         # Express REST API · GitHub OAuth · ETL 파이프라인 · 공개 트렌드 SSR · node:test
+│   ├── src/         # routes · controllers · models · middleware · services(security-engine·readme-scan·cluster-analyzer) · etl · utils · views
+│   ├── scripts/     # build-engine.mjs (npm run build:engine) · public-smoke.mjs (npm run smoke:public)
+│   ├── native/      # 빌드 산출물(trendar_engine.node · trendar-scan, gitignore)
+│   └── assets/fonts/ # OG 이미지용 IBM Plex 폰트 (OFL)
+└── frontend/        # React + Vite + TypeScript SPA (로그인 + 4 화면)
+    ├── src/         # pages · components · api · auth · lib · styles
+    └── public/      # robots.txt · llms.txt · og-v2.png (sitemap.xml은 백엔드가 동적 생성)
 ```
 
 ---

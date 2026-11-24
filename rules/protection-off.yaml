@@ -1,0 +1,62 @@
+# Antivirus / Defender / Real-Time Protection Disabling & Context Rules
+
+direct_patterns:
+  - id: "PROFF-EN-VERB-TARGET"
+    description: "Imperative verb disabling Defender / antivirus / real-time protection"
+    pattern: '(?i)\b(?:disable|turn\s+off|switch\s+off|pause|deactivate|stop|uninstall)\s+(?:(?:the|your|any|all|temporarily|briefly|windows|microsoft|["''“”‘’*_`])\s*)*(?:real-?\s?time\s+protection|tamper\s+protection|(?:windows\s+|microsoft\s+)?defender|anti-?virus(?:\s+software)?|virus\s*(?:&|and)\s*threat\s+protection)'
+  - id: "PROFF-EN-TARGET-STATE"
+    description: "Protection target turned off / disabled / paused"
+    pattern: '(?i)(?:real-?\s?time\s+protection|tamper\s+protection|(?:windows\s+|microsoft\s+)?defender|anti-?virus(?:\s+software)?|virus\s*(?:&|and)\s*threat\s+protection)["''“”‘’*_`]*\s*(?:is\s+|are\s+|must\s+be\s+|should\s+be\s+|needs\s+to\s+be\s+)?(?:turned\s+off|switched\s+off|off|disabled|paused)\b'
+
+command_patterns:
+  - id: "PROFF-CMD-MPPREF"
+    description: "PowerShell Set-MpPreference -Disable*"
+    pattern: '(?i)\bSet-MpPreference\b[^\n]{0,200}-Disable\w*\s+(?:\$?true|1)\b'
+  - id: "PROFF-CMD-SC-STOP"
+    description: "sc/net stop WinDefend"
+    pattern: '(?i)\b(?:sc(?:\.exe)?|net)\s+stop\s+["'']?WinDefend\b'
+  - id: "PROFF-CMD-STOP-SERVICE"
+    description: "PowerShell Stop-Service WinDefend"
+    pattern: '(?i)\bStop-Service\b[^\n]{0,60}\bWinDefend\b'
+  - id: "PROFF-CMD-REG-DISABLE"
+    description: "Registry DisableAntiSpyware / DisableRealtimeMonitoring = 1"
+    pattern: '(?i)\bDisable(?:AntiSpyware|RealtimeMonitoring)\b[^\n]{0,80}(?:/d\s+1\b|-Value\s+1\b|=\s*1\b|dword:0{0,7}1\b)'
+
+# Only evaluated when repository metadata indicates codeless (language=null, forks=0, size<=100KB)
+generic_codeless_pattern: '(?i)\b(?:disable|turn\s+off|switch\s+off|pause|deactivate|uninstall)\s+(?:(?:the|your|any|all|temporarily|briefly|windows|microsoft|["''“”‘’*_`])\s*)*(?:security\s+(?:software|programs?|tools?|suites?)|firewall)'
+
+# Safe multilingual rules (used with negation filtering in full v4 scoring mode)
+multilingual_rules:
+  - id: "PROFF-KO"
+    lang: "ko"
+    positive: '(?:windows\s*defender|디펜더|실시간\s*보호|백신(?:\s*프로그램)?|바이러스\s*보호).{0,40}(?:꺼\s*주|끄고|끄세|끄신|비활성화하|비활성화한|중지하|중지한|해제하|해제한)'
+    negation: '(?:안\s*됩니다|안\s*돼|끄지\s*마|끄면\s*안|안\s*꺼도|필요.{0,12}없|않습니다|않아도|금지|보다는|알림|코로나|검사)'
+  - id: "PROFF-ZH"
+    lang: "zh"
+    positive: '(?:关闭|禁用|停用|暂停).{0,16}(?:杀毒软件|实时保护|windows\s*defender|防病毒|安全软件)'
+    negation: '(?:禁止|不应|不要|不会|没有|无须|无需|不建议|不必|通知|扫描)'
+  - id: "PROFF-RU"
+    lang: "ru"
+    positive: '(?i)(?:отключите|выключите|приостановите|деактивируйте).{0,24}(?:антивирус|защитник\s*windows|защиту\s*в\s*реальном\s*времени)'
+    negation: '(?i)(?:нельзя|не\s+требуется|не\s+нужно|не\s+отключайте|уведомления)'
+  - id: "PROFF-ES"
+    lang: "es"
+    positive: '(?i)\b(?:desactiva|deshabilita|pausa)\s+(?:temporalmente\s+)?(?:el\s+|la\s+|tu\s+)?(?:antivirus|windows\s+defender|protección\s+en\s+tiempo\s+real)'
+    negation: '(?i)\b(?:nunca|no\s+es\s+necesario|sin\s+desactivar|notificaciones|ventana)\b'
+  - id: "PROFF-PT"
+    lang: "pt"
+    positive: '(?i)\b(?:desative|desabilite|pause)\s+(?:temporariamente\s+)?(?:o\s+|a\s+|seu\s+)?(?:antivírus|windows\s+defender|proteção\s+em\s+tempo\s+real)'
+    negation: '(?i)\b(?:nunca|proibido|sem\s+desativar|não\s+é\s+necessário|notificações)\b'
+
+# Context patterns indicating blue-team / security research documentation (reduces FP)
+security_research_indicators:
+  - '(?i)\bMITRE\s+ATT&CK\b'
+  - '(?i)\bT1[0-6]\d{2}(?:\.\d{3})?\b'
+  - '(?i)\bCVE-\d{4}-\d{4,7}\b'
+  - '(?i)\b(?:YARA|Sigma)\s+(?:rule|detection|signature)s?\b'
+  - '(?i)\b(?:threat\s+hunting|blue\s+team|detection\s+engineering|IOC\s+(?:reference|list|table))\b'
+
+# State-description patterns (not instructions)
+state_description_patterns:
+  - '(?i)\b(?:disabled|turned\s+off|off)\s+only\s+in\s+(?:the\s+)?(?:screenshot|demo|ci|vm|sandbox|test|container)\b'
+  - '(?i)\bnote:\s*[^\n]{0,80}\b(?:disabled|off)\s+only\s+in\b'

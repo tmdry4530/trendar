@@ -1,0 +1,59 @@
+# Trendar Security Engine — Master Ruleset Configuration (v4)
+# 코드 재컴파일 없이 규칙·임계치·가중치를 조정할 수 있도록 외부화된 마스터 설정입니다.
+
+version: 4
+ruleset_id: "trendar-default-v4"
+description: "Multi-layer static threat detection ruleset (AST + Lexer + Deobfuscation + Entropy + Metadata + SimHash)"
+
+includes:
+  - exec-patterns.yaml
+  - protection-off.yaml
+  - domains-and-lures.yaml
+  - manifest-threats.yaml
+
+limits:
+  max_readme_bytes: 524288      # 512 KiB strict byte cap
+  max_segment_chars: 1000
+  max_decodes: 20
+  max_encoded_chars: 10924
+  max_evidence_chars: 500
+  run_window: 3                 # Non-empty, non-comment command lines
+  max_saved_names: 20
+  max_runner_depth: 3
+  min_text_key_chars: 300
+  min_skeleton_headings: 8
+  max_lure_url_chars: 200
+  new_account_days: 90
+  codeless_max_size_kb: 100
+  cluster_min_owners: 3
+  simhash_max_distance: 5       # 64-bit SimHash Hamming distance threshold (~92% similarity, 6-band exact index)
+  entropy_min_token_len: 64
+  entropy_threshold: 4.6
+
+scoring:
+  malicious_threshold: 70
+  suspicious_threshold: 40
+  # D-006 / D-014 하드 룰 호환: 원격 실행 + 보호 해제 조합은 즉시 malicious 보장
+  require_hard_combo_for_readme_only: false
+  weights:
+    remote_exec: 45
+    lolbin_exec: 45
+    obfuscated_exec_bonus: 15
+    protection_off_direct: 45
+    protection_off_command: 50
+    protection_off_generic_codeless: 40
+    protection_off_multilingual: 40
+    homoglyph_or_zerowidth: 15
+    high_entropy_payload: 10
+    filehost_archive_url: 25
+    homepage_filehost_archive: 40
+    description_crack_lure: 25
+    typosquat_brand: 20
+    codeless_meta: 15
+    new_account: 20
+    star_anomaly_codeless: 15
+    shortener_url: 5
+    security_research_penalty: -45
+    manifest_malicious_script: 80
+    manifest_autorun_task: 80
+    manifest_binary_decoy_tree: 75

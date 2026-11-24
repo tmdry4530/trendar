@@ -1,0 +1,75 @@
+# Opt-in Static Analysis Rules for Repository Manifests, Build Hooks, and Git Trees
+# Default: OFF in production README pipeline (invoked explicitly via analyzeManifest API or CLI --manifest)
+
+npm_dangerous_hooks:
+  - preinstall
+  - install
+  - postinstall
+  - preuninstall
+  - prepare
+
+manifest_command_patterns:
+  - id: "MAN-REMOTE-EXEC"
+    description: "Lifecycle script downloads and executes remote payload"
+    pattern: '(?i)(?:curl|wget|irm|iwr|invoke-webrequest|invoke-restmethod|certutil|bitsadmin)\b[^\n]{0,200}(?:https?://)[^\n]{0,200}(?:\|\s*(?:ba|z|da)?sh|\|\s*(?:iex|pwsh|powershell|python3?|node)|\b(?:bash|sh|powershell|pwsh|cmd|node|python3?)\b)'
+    weight: 80
+  - id: "MAN-ENCODED-EXEC"
+    description: "Lifecycle script executes base64/encoded command"
+    pattern: '(?i)(?:powershell|pwsh)[^\n]{0,80}-e(?:nc|ncodedcommand)?\s+[A-Za-z0-9+/=]{16,}|base64\s+-d\s*\|\s*(?:ba|z|da)?sh'
+    weight: 80
+  - id: "MAN-EVAL-NETWORK"
+    description: "Inline JS/Python network fetch + eval/exec in install hook"
+    pattern: '(?i)(?:fetch|https?\.get|urllib|requests\.get)\s*\([^\n]{0,160}(?:eval|Function|exec|execSync|os\.system|subprocess)'
+    weight: 75
+  - id: "MAN-HIDDEN-POWERSHELL"
+    description: "Hidden-window PowerShell invocation in manifest or IDE task"
+    pattern: '(?i)(?:powershell|pwsh)(?:\.exe)?[^\n]{0,80}-w(?:indowstyle)?\s+hidden'
+    weight: 70
+
+vscode_autorun_weight: 80
+
+binary_extensions:
+  - exe
+  - msi
+  - scr
+  - dll
+  - com
+  - bat
+  - cmd
+  - pif
+  - lnk
+  - vbs
+  - hta
+  - zip
+  - rar
+  - 7z
+  - dmg
+  - pkg
+  - apk
+
+source_extensions:
+  - rs
+  - go
+  - py
+  - js
+  - ts
+  - jsx
+  - tsx
+  - c
+  - cc
+  - cpp
+  - h
+  - hpp
+  - java
+  - kt
+  - cs
+  - rb
+  - php
+  - swift
+  - zig
+  - lua
+  - ex
+  - hs
+  - scala
+  - clj
+  - dart

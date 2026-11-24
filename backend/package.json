@@ -8,6 +8,9 @@
     "dev": "node --watch src/server.js",
     "start": "node src/server.js",
     "etl": "node src/etl/pipeline.js",
+    "build:engine": "node scripts/build-engine.mjs",
+    "test:engine": "cargo test --manifest-path ../security-engine/Cargo.toml",
+    "bench:security": "node --expose-gc ../benchmarks/run-bench.mjs --engine=rust --iterations=3",
     "test": "node --test test/**/*.test.js",
     "typecheck": "tsc -p tsconfig.json",
     "smoke:public": "node scripts/public-smoke.mjs"

@@ -1,6 +1,8 @@
 # dependencies & build output
 node_modules/
 dist/
+security-engine/target/
+backend/native/
 
 # env secrets (keep .env.example)
 .env
