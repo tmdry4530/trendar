@@ -15,7 +15,9 @@ import { createOgRenderer, createResvgPngRenderer, OG_FONT_PATHS, RESVG_WASM_PAT
 import { createSitemapHandler } from './services/public-sitemap.js';
 import { measureCandidate, rankRising } from './services/rising-score.js';
 import { hashSessionToken } from './utils/crypto.js';
-import { publicAnalyticsFlushMs, publicImageRateLimitPerMin, publicRisingConfig } from './utils/limits.js';
+import {
+  publicAnalyticsFlushMs, publicCacheMaxPending, publicImageRateLimitPerMin, publicPageRateLimitPerMin, publicRisingConfig,
+} from './utils/limits.js';
 import { createTtlCache } from './utils/ttl-cache.js';
 
 const FRONTEND_DIR = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../frontend');
@@ -45,7 +47,7 @@ export function createPublicDeps(overrides = {}) {
   const model = pick('model', () => publicModel);
   const feeds = pick('feeds', () => allFeeds());
   const appUrl = pick('appUrl', () => process.env.APP_URL || 'http://localhost:5173');
-  const cache = pick('cache', () => createTtlCache({ ttlMs: 600000 }));
+  const cache = pick('cache', () => createTtlCache({ ttlMs: 600000, maxPending: publicCacheMaxPending() }));
   const data = pick('data', () => createPublicData({
     model,
     feeds,
@@ -64,14 +66,16 @@ export function createPublicDeps(overrides = {}) {
     return created;
   });
   const rateLimit = pick('rateLimit', () => createRateLimiter({ limit: publicImageRateLimitPerMin() }));
+  const pageRateLimit = pick('pageRateLimit', () => createRateLimiter({ limit: publicPageRateLimitPerMin(), html: true }));
   const isAuthenticated = pick('isAuthenticated', () => createIsAuthenticated(pick('hasValidSession', () => hasValidByHash)));
   const sitemapHandler = pick('sitemapHandler', () => createSitemapHandler({ data, appUrl }));
   const pagesRouter = pick('pagesRouter', () => createPublicRouter({
     controller: createPublicController({ data, feeds, appUrl, isAuthenticated }),
+    rateLimit: pageRateLimit,
   }));
   const assetsRouter = pick('assetsRouter', () => createPublicAssetsRouter({ data, og, rateLimit }));
 
-  return { cache, data, og, tracker, rateLimit, isAuthenticated, appUrl, sitemapHandler, pagesRouter, assetsRouter };
+  return { cache, data, og, tracker, rateLimit, pageRateLimit, isAuthenticated, appUrl, sitemapHandler, pagesRouter, assetsRouter };
 }
 
 export function mountPublic(app, deps) {

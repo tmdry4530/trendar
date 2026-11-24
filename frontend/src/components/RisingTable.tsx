@@ -59,7 +59,14 @@ export default function RisingTable({ data, loading, error, onRetry }: RisingTab
           return (
             <tr
               key={repo.id}
+              tabIndex={0}
               onClick={() => navigate(`/repos/${repo.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate(`/repos/${repo.id}`);
+                }
+              }}
               title={spanHours != null && spanHours !== 24
                 ? t('dashboard.rising.detailSpan', {
                     hours: spanHours,

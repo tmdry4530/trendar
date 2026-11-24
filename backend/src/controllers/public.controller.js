@@ -1,3 +1,4 @@
+// @ts-check
 import { OWNER_RE, REPO_NAME_RE, SLUG_RE } from '../config/public-feeds.js';
 import { routeTemplateOf } from '../utils/public-output.js';
 import { renderFeedPage, renderLandingPage, renderNotFoundPage, renderRepoPage } from '../views/public-pages.js';

@@ -1,3 +1,4 @@
+// @ts-check
 import { parseAcceptLanguage, resolveLocale } from '../utils/locale.js';
 
 const COUNTRY_CODE = /^[A-Z]{2}$/;

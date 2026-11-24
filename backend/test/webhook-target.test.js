@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  TargetError, allowPrivateTargets, formatOf, isBlockedAddress, maskUrl, parseTargetUrl, resolveTarget,
+  TargetError, allowPrivateTargets, createLookupLimiter, formatOf, isBlockedAddress, maskUrl, parseTargetUrl, resolveTarget,
 } from '../src/utils/webhook-target.js';
 
 const lookupOf = (...addresses) => async () => addresses.map((address) => ({ address, family: address.includes(':') ? 6 : 4 }));
@@ -84,4 +84,63 @@ test('Discord·Slack 주소를 형식으로 구분하고, 화면용 주소는 �
   // 짧은 경로는 끝 4자가 곧 전체라서 전부 가린다.
   assert.equal(maskUrl(new URL('https://example.com/abcd')), 'https://example.com/…');
   assert.doesNotMatch(maskUrl(new URL('https://hooks.slack.com/services/T0/B0/verysecretpath')), /verysecret/);
+});
+
+test('Daybreak #2: DNS 타임아웃 후에도 실제 lookup 종료 전까지 사용자·전역 동시성 상한을 유지하고 지연 reject를 소비한다', async () => {
+  const limiter = createLookupLimiter({ maxInFlight: 2 });
+  const deferreds = [];
+  let lookupCalls = 0;
+  const hangingLookup = () => {
+    lookupCalls += 1;
+    return new Promise((resolve, reject) => {
+      deferreds.push({ resolve, reject });
+    });
+  };
+  const url = parseTargetUrl('https://slow.example.com/hook');
+
+  // 1) 사용자 1의 첫 요청이 타임아웃된다 — underlying lookup은 아직 미종료.
+  assert.equal(
+    await codeOf(() => resolveTarget(url, { lookup: hangingLookup, timeoutMs: 15, limiter, key: 'user-1' })),
+    'WEBHOOK_URL_INVALID',
+  );
+  assert.equal(lookupCalls, 1);
+  assert.deepEqual(limiter.stats(), { inFlight: 1, activeKeys: 1, maxInFlight: 2 });
+
+  // 2) 같은 사용자의 즉시 재시도는 lookup을 새로 띄우지 않고 WEBHOOK_SAVE_IN_PROGRESS로 거절된다.
+  assert.equal(
+    await codeOf(() => resolveTarget(url, { lookup: hangingLookup, timeoutMs: 15, limiter, key: 'user-1' })),
+    'WEBHOOK_SAVE_IN_PROGRESS',
+  );
+  assert.equal(lookupCalls, 1);
+
+  // 3) 사용자 2가 두 번째 슬롯을 점유해 타임아웃된다.
+  assert.equal(
+    await codeOf(() => resolveTarget(url, { lookup: hangingLookup, timeoutMs: 15, limiter, key: 'user-2' })),
+    'WEBHOOK_URL_INVALID',
+  );
+  assert.equal(lookupCalls, 2);
+  assert.deepEqual(limiter.stats(), { inFlight: 2, activeKeys: 2, maxInFlight: 2 });
+
+  // 4) 전역 상한(2)에 도달한 상태에서 사용자 3은 lookup을 호출하지 않고 WEBHOOK_DNS_BUSY로 거절된다.
+  assert.equal(
+    await codeOf(() => resolveTarget(url, { lookup: hangingLookup, timeoutMs: 15, limiter, key: 'user-3' })),
+    'WEBHOOK_DNS_BUSY',
+  );
+  assert.equal(lookupCalls, 2);
+
+  // 5) 타임아웃된 underlying lookup들이 지연 reject / resolve 되어도 unhandledRejection 없이 슬롯이 해제된다.
+  deferreds[0].reject(Object.assign(new Error('late failure'), { code: 'EAI_AGAIN' }));
+  deferreds[1].resolve([{ address: '93.184.216.34', family: 4 }]);
+  await new Promise((r) => setTimeout(r, 10));
+  assert.deepEqual(limiter.stats(), { inFlight: 0, activeKeys: 0, maxInFlight: 2 });
+
+  // 6) 슬롯이 해제되면 같은 사용자의 새 요청이 정상 동작하며 사설 대역 차단도 유지된다.
+  assert.deepEqual(
+    await resolveTarget(url, { lookup: lookupOf('93.184.216.34'), limiter, key: 'user-1' }),
+    { address: '93.184.216.34', family: 4 },
+  );
+  assert.equal(
+    await codeOf(() => resolveTarget(url, { lookup: lookupOf('10.0.0.1'), limiter, key: 'user-1' })),
+    'WEBHOOK_URL_BLOCKED',
+  );
 });

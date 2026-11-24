@@ -1,8 +1,13 @@
+// @ts-check
 const SUPPORTED_LOCALES = new Set(['ko', 'en']);
 const MAX_HEADER_LENGTH = 512;
 const MAX_LANGUAGE_ITEMS = 10;
 const LANGUAGE_TAG = /^[a-z]{1,8}(?:-[a-z0-9]{1,8})*$/i;
 
+/**
+ * @param {unknown} header
+ * @returns {string[]}
+ */
 export function parseAcceptLanguage(header) {
   if (typeof header !== 'string' || header.length === 0) return [];
 
@@ -24,12 +29,16 @@ export function parseAcceptLanguage(header) {
       }
       return { locale: tag.toLowerCase().split('-')[0], quality, index };
     })
-    .filter(Boolean)
+    .filter((item) => item !== null)
     .sort((a, b) => b.quality - a.quality || a.index - b.index);
 
   return [...new Set(parsed.map((item) => item.locale))];
 }
 
+/**
+ * @param {{ countryCode?: string | null, acceptedLanguages?: string[] }} options
+ * @returns {'ko' | 'en'}
+ */
 export function resolveLocale({ countryCode, acceptedLanguages = [] }) {
   const country = typeof countryCode === 'string' ? countryCode.toUpperCase() : null;
   const countryLocales = country === 'KR' ? ['ko'] : country ? ['en'] : null;
@@ -38,8 +47,8 @@ export function resolveLocale({ countryCode, acceptedLanguages = [] }) {
     const preferred = acceptedLanguages.find(
       (locale) => SUPPORTED_LOCALES.has(locale) && countryLocales.includes(locale)
     );
-    return preferred || countryLocales[0];
+    return /** @type {'ko' | 'en'} */ (preferred || countryLocales[0]);
   }
 
-  return acceptedLanguages.find((locale) => SUPPORTED_LOCALES.has(locale)) || 'en';
+  return /** @type {'ko' | 'en'} */ (acceptedLanguages.find((locale) => SUPPORTED_LOCALES.has(locale)) || 'en');
 }

@@ -1,3 +1,4 @@
+// @ts-check
 // utils/kst.js — KST(UTC+9) 기준 날짜 계산. 서버 타임존과 무관하게 동작한다.
 // now 파라미터는 테스트 주입용.
 const KST_OFFSET_MS = 9 * 60 * 60 * 1000;

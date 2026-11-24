@@ -368,3 +368,61 @@ test('callback clears next and state cookies on every success/error path', async
     else assert.equal(res.redirectedTo, `/login?error=${path}`);
   }
 });
+
+test('Daybreak #1: 활성·미해지 구독이 있으면 계정 삭제를 409 ACTIVE_SUBSCRIPTION으로 차단하고 세션·사용자를 보존한다', async () => {
+  for (const status of ['active', 'trialing', 'past_due', 'paused', 'unknown']) {
+    let deleteCalled = false;
+    const ctrl = createAuthController({
+      oauth: {},
+      users: { deleteById: async () => { deleteCalled = true; return true; } },
+      sessions: {},
+      subscriptions: {
+        findByUserId: async (userId) => ({
+          user_id: userId,
+          status,
+          paddle_customer_id: 'ctm_01',
+          paddle_subscription_id: 'sub_01',
+        }),
+      },
+      crypto: stubCrypto(),
+    });
+    const res = mockRes();
+    let capturedErr;
+    await ctrl.deleteAccount({ user: { id: 42 }, cookies: { sid: 'live-session' } }, res, (err) => { capturedErr = err; });
+    assert.equal(deleteCalled, false, `status=${status} must not delete user`);
+    assert.equal(res.cleared.length, 0, `status=${status} must not clear session cookie`);
+    assert.equal(capturedErr?.status, 409, `status=${status}`);
+    assert.equal(capturedErr?.code, 'ACTIVE_SUBSCRIPTION', `status=${status}`);
+  }
+});
+
+test('Daybreak #1: 구독이 없거나 canceled 상태일 때만 계정 삭제가 성공하고, 구독 조회 오류 시 fail-closed 된다', async () => {
+  for (const sub of [null, { status: 'canceled', current_period_end: new Date('2099-01-01T00:00:00Z') }]) {
+    let deletedId = null;
+    const ctrl = createAuthController({
+      oauth: {},
+      users: { deleteById: async (id) => { deletedId = id; return true; } },
+      sessions: {},
+      subscriptions: { findByUserId: async () => sub },
+      crypto: stubCrypto(),
+    });
+    const res = mockRes();
+    await ctrl.deleteAccount({ user: { id: 55 }, cookies: {} }, res, failNext);
+    assert.equal(deletedId, 55);
+    assert.ok(res.cleared.includes('sid'));
+    assert.deepEqual(res.body, { ok: true, data: null });
+  }
+
+  let deletedOnErr = false;
+  const failingCtrl = createAuthController({
+    oauth: {},
+    users: { deleteById: async () => { deletedOnErr = true; return true; } },
+    sessions: {},
+    subscriptions: { findByUserId: async () => { throw new Error('db unavailable'); } },
+    crypto: stubCrypto(),
+  });
+  let err;
+  await failingCtrl.deleteAccount({ user: { id: 55 }, cookies: {} }, mockRes(), (e) => { err = e; });
+  assert.equal(deletedOnErr, false);
+  assert.match(err?.message ?? '', /db unavailable/);
+});

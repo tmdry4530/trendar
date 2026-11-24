@@ -1,3 +1,4 @@
+// @ts-check
 // services/github-oauth.js — GitHub OAuth: authorize URL 생성, code 교환, 프로필 조회 (내장 fetch)
 const AUTHORIZE_URL = 'https://github.com/login/oauth/authorize';
 const TOKEN_URL = 'https://github.com/login/oauth/access_token';

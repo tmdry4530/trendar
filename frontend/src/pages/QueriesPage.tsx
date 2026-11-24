@@ -5,7 +5,7 @@ import { runEtl, getEtlStatus } from '../api/stats';
 import { useAsync } from '../lib/useAsync';
 import { formatInt, formatDate } from '../lib/format';
 import { useToast } from '../components/Toast';
-import { LoadingState, EmptyState, ErrorState } from '../components/States';
+import { EmptyState, ErrorState, TableSkeleton } from '../components/States';
 import ConfirmDialog from '../components/ConfirmDialog';
 import QueryForm from '../components/QueryForm';
 import Help from '../components/Help';
@@ -197,6 +197,15 @@ export default function QueriesPage() {
             onChange={(e) =>
               setEditState((s) => s ? { ...s, query: e.target.value } : s)
             }
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && !editState.saving) {
+                e.preventDefault();
+                void commitEdit();
+              } else if (e.key === 'Escape' && !editState.saving) {
+                e.preventDefault();
+                cancelEdit();
+              }
+            }}
             disabled={editState.saving}
             maxLength={200}
             autoFocus
@@ -374,7 +383,7 @@ export default function QueriesPage() {
 
         {/* List panel */}
         <div className="panel panel--flush">
-          {loading && <LoadingState />}
+          {loading && <TableSkeleton rows={5} columns={5} />}
 
           {!loading && error && (
             <ErrorState message={error} onRetry={reload} />

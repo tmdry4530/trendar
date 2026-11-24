@@ -139,3 +139,35 @@ test('missing dependencies are not cached and longer dependencies never extend t
   advance(1);
   assert.equal(cache.get('a'), undefined);
 });
+
+test('Daybreak #4: maxPending 상한을 초과하는 동시 캐시 미스는 503으로 차단하고 동일 키 중복 요청은 공유한다', async () => {
+  const cache = createTtlCache({ ttlMs: 1000, maxEntries: 10, maxPending: 2 });
+  const resolvers = new Map();
+  let calls = 0;
+  const loader = (id) => () => {
+    calls += 1;
+    return new Promise((resolve) => { resolvers.set(id, resolve); });
+  };
+
+  const p1 = cache.getOrCompute('k1', loader('k1'));
+  const p2 = cache.getOrCompute('k2', loader('k2'));
+  assert.equal(cache.pendingSize(), 2);
+
+  // 동일 키는 추가 슬롯을 소비하지 않고 기존 pending Promise를 공유한다.
+  const p1Dup = cache.getOrCompute('k1', loader('k1-dup'));
+  assert.equal(p1, p1Dup);
+
+  // 신규 키는 maxPending 초과 시 로더를 호출하지 않고 503 CACHE_OVERLOADED로 즉시 거부된다.
+  await assert.rejects(
+    cache.getOrCompute('k3', loader('k3')),
+    (err) => err.status === 503 && err.code === 'CACHE_OVERLOADED',
+  );
+  await Promise.resolve();
+  assert.equal(calls, 2);
+
+  resolvers.get('k1')('v1');
+  resolvers.get('k2')('v2');
+  assert.deepEqual(await Promise.all([p1, p2]), ['v1', 'v2']);
+  assert.equal(cache.pendingSize(), 0);
+  assert.equal(await cache.getOrCompute('k3', () => 'v3'), 'v3');
+});

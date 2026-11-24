@@ -4,6 +4,8 @@ import express from 'express';
 import cookieParser from 'cookie-parser';
 import { allFeeds, findFeedConfig } from '../src/config/public-feeds.js';
 import { createPublicDeps, mountPublic } from '../src/public-mount.js';
+import { createRateLimiter } from '../src/middleware/public-rate-limit.js';
+import { createTtlCache } from '../src/utils/ttl-cache.js';
 import { createApp } from '../src/app.js';
 
 const APP_URL = 'https://trendar.example';
@@ -58,13 +60,14 @@ function fakeData() {
   };
 }
 
-function fakeDeps({ authenticated = false, data = fakeData(), hasValidSession } = {}) {
+function fakeDeps({ authenticated = false, data = fakeData(), hasValidSession, pageRateLimit } = {}) {
   const auth = { calls: 0 };
   const tracked = [];
   const deps = createPublicDeps({
     appUrl: APP_URL,
     feeds,
     data,
+    ...(pageRateLimit ? { pageRateLimit } : {}),
     model: {
       addDailyMetrics: async () => {
         throw new Error('model must not be used');
@@ -292,5 +295,51 @@ test('malformed public URL encoding returns minimal noindex HTML 400, not a serv
       assert.match(html, /400/, path);
       assert.doesNotMatch(html, /temporarily unavailable|URIError|Failed to decode/, path);
     }
+  });
+});
+
+test('Daybreak #4: 공개 SSR 페이지(/repo·/ko/repo)는 속도 제한 429 HTML을 반환하고 SPA 경로는 영향받지 않는다', async () => {
+  const limiter = createRateLimiter({ limit: 2, windowMs: 60000, now: () => 0, html: true });
+  await withStubApp({ pageRateLimit: limiter }, async ({ get }) => {
+    assert.equal((await get('/repo/a/b')).status, 200);
+    assert.equal((await get('/ko/repo/a/b')).status, 200);
+
+    const limited = await get('/repo/c/d');
+    assert.equal(limited.status, 429);
+    assert.match(limited.headers.get('content-type'), /^text\/html/);
+    assert.equal(limited.headers.get('cache-control'), 'no-store');
+    assert.equal(limited.headers.get('retry-after'), '60');
+    assert.match(await limited.text(), /<meta name="robots" content="noindex">/);
+
+    // SPA 경로는 공개 SSR 속도 제한 미들웨어에 걸리지 않는다.
+    const spa = await get('/repos');
+    assert.equal(spa.status, 200);
+    assert.equal(await spa.text(), 'SPA');
+  });
+});
+
+test('Daybreak #4: 캐시 pending 상한 초과 시 /repo/:owner/:name은 503 HTML로 부하를 차단한다', async () => {
+  const cache = createTtlCache({ ttlMs: 60000, maxEntries: 10, maxPending: 1 });
+  let releaseFirst;
+  const baseData = fakeData();
+  const data = {
+    ...baseData,
+    getRepo(owner, name) {
+      return cache.getOrCompute(`repo:${owner}/${name}`, () => new Promise((resolve) => {
+        if (owner === 'slow') releaseFirst = () => resolve(null);
+        else resolve(null);
+      }));
+    },
+  };
+  await withStubApp({ data }, async ({ get }) => {
+    const firstReq = get('/repo/slow/one');
+    await new Promise((r) => setTimeout(r, 15));
+    const shed = await get('/repo/other/two');
+    assert.equal(shed.status, 503);
+    assert.match(shed.headers.get('content-type'), /^text\/html/);
+    assert.equal(shed.headers.get('cache-control'), 'no-store');
+    releaseFirst();
+    const firstRes = await firstReq;
+    assert.equal(firstRes.status, 404);
   });
 });

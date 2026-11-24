@@ -10,6 +10,38 @@
   gap: 6px;
   position: relative;
   overflow: hidden;
+  box-shadow: var(--panel-inset);
+  transition: border-color 0.16s var(--ease), transform 0.16s var(--ease), background 0.16s var(--ease);
+}
+
+.interactive:hover {
+  border-color: var(--accent-dim);
+  transform: translateY(-1px);
+  background: linear-gradient(180deg, var(--surface-3), var(--surface));
+}
+
+.head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+
+.arrow {
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--faint);
+  transition: color 0.16s var(--ease), transform 0.16s var(--ease);
+}
+
+.interactive:hover .arrow {
+  color: var(--accent);
+  transform: translate(1px, -1px);
+}
+
+.valueSkeleton {
+  width: 72px;
+  height: 30px;
 }
 
 .card--accent {

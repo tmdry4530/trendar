@@ -1,3 +1,4 @@
+// @ts-check
 // 사용자가 등록한 수신 URL의 형식과 주소를 검증한다. 서버가 이 주소로 요청을 보내므로
 // 내부망으로 향하는 주소를 여기 한 곳에서 걸러낸다.
 import dns from 'node:dns';
@@ -6,7 +7,7 @@ import net from 'node:net';
 export const MAX_URL_LENGTH = 2048;
 
 export class TargetError extends Error {
-  /** @param {'WEBHOOK_URL_INVALID' | 'WEBHOOK_URL_BLOCKED'} code */
+  /** @param {'WEBHOOK_URL_INVALID' | 'WEBHOOK_URL_BLOCKED' | 'WEBHOOK_SAVE_IN_PROGRESS' | 'WEBHOOK_DNS_BUSY'} code */
   constructor(code) {
     super(code);
     this.name = 'TargetError';
@@ -20,18 +21,53 @@ export function allowPrivateTargets(env = process.env) {
 }
 
 const LOOKUP_TIMEOUT_MS = 3000;
+const DEFAULT_MAX_IN_FLIGHT_LOOKUPS = 8;
+
+// getaddrinfo는 취소할 수 없어 timeout 뒤에도 libuv 워커 스레드를 점유한다.
+// 전역 동시 실행 상한과 사용자(key)별 슬롯을 실제 lookup Promise 완료 시점까지 유지한다.
+export function createLookupLimiter({ maxInFlight = DEFAULT_MAX_IN_FLIGHT_LOOKUPS } = {}) {
+  let inFlight = 0;
+  const activeKeys = new Set();
+
+  function tryAcquire(key) {
+    if (key !== undefined && activeKeys.has(key)) {
+      throw new TargetError('WEBHOOK_SAVE_IN_PROGRESS');
+    }
+    if (inFlight >= maxInFlight) {
+      throw new TargetError('WEBHOOK_DNS_BUSY');
+    }
+    inFlight += 1;
+    if (key !== undefined) activeKeys.add(key);
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      inFlight = Math.max(0, inFlight - 1);
+      if (key !== undefined) activeKeys.delete(key);
+    };
+  }
+
+  return {
+    tryAcquire,
+    stats() {
+      return { inFlight, activeKeys: activeKeys.size, maxInFlight };
+    },
+  };
+}
+
+export const defaultLookupLimiter = createLookupLimiter();
 
 const blocked = new net.BlockList();
-for (const [prefix, bits] of [
+for (const [prefix, bits] of /** @type {Array<[string, number]>} */ ([
   ['0.0.0.0', 8], ['10.0.0.0', 8], ['100.64.0.0', 10], ['127.0.0.0', 8], ['169.254.0.0', 16], ['172.16.0.0', 12],
   ['192.0.0.0', 24], ['192.0.2.0', 24], ['192.88.99.0', 24], ['192.168.0.0', 16], ['198.18.0.0', 15], ['198.51.100.0', 24],
   ['203.0.113.0', 24], ['224.0.0.0', 4], ['240.0.0.0', 4],
-]) blocked.addSubnet(prefix, bits, 'ipv4');
+])) blocked.addSubnet(prefix, bits, 'ipv4');
 // ::/96(IPv4 호환, ::와 ::1 포함)과 ::ffff:0:0:0/96(IPv4 변환)은 쓰이지 않는 예약 대역이라 통째로 막는다.
-for (const [prefix, bits] of [
+for (const [prefix, bits] of /** @type {Array<[string, number]>} */ ([
   ['::', 96], ['::ffff:0:0:0', 96], ['64:ff9b:1::', 48], ['100::', 64], ['fc00::', 7], ['fe80::', 10], ['fec0::', 10],
   ['ff00::', 8], ['2001:db8::', 32], ['2001::', 32],
-]) blocked.addSubnet(prefix, bits, 'ipv6');
+])) blocked.addSubnet(prefix, bits, 'ipv6');
 
 // IPv4를 품은 IPv6 주소: IPv4 매핑(::ffff:0:0/96), NAT64(64:ff9b::/96), 6to4(2002::/16).
 const embedsIpv4 = new net.BlockList();
@@ -95,22 +131,48 @@ function hostOf(url) {
 /**
  * 연결할 주소를 정한다. 이름이 여러 주소로 풀리면 하나라도 차단 대역이면 거부한다.
  * @param {URL} url
- * @param {{ allowPrivate?: boolean, lookup?: (host: string, options: object) => Promise<Array<{ address: string, family: number }>> }} [options]
+ * @param {{
+ *   allowPrivate?: boolean,
+ *   lookup?: (host: string, options: object) => Promise<Array<{ address: string, family: number }>>,
+ *   timeoutMs?: number,
+ *   limiter?: ReturnType<typeof createLookupLimiter> | null,
+ *   key?: string | number,
+ * }} [options]
  * @returns {Promise<{ address: string, family: 4 | 6 }>}
  */
-export async function resolveTarget(url, { allowPrivate = false, lookup = dns.promises.lookup } = {}) {
+export async function resolveTarget(url, {
+  allowPrivate = false,
+  lookup = dns.promises.lookup,
+  timeoutMs = LOOKUP_TIMEOUT_MS,
+  limiter = defaultLookupLimiter,
+  key,
+} = {}) {
   const host = hostOf(url);
   let addresses;
   const literal = net.isIP(host);
   if (literal) {
     addresses = [{ address: host, family: literal }];
   } else {
-    // getaddrinfo에는 시간 제한이 없어, 응답하지 않는 DNS가 요청과 발신 처리를 붙잡지 않게 끊는다.
+    const release = limiter ? limiter.tryAcquire(key) : () => {};
+    // getaddrinfo에는 시간 제한이 없어, 응답하지 않는 DNS가 요청과 발신 처리를 붙잡지 않게 끊되
+    // 실제 lookup Promise가 종료될 때까지 슬롯을 유지하고 지연 reject를 소비한다.
+    let lookupPromise;
+    try {
+      lookupPromise = Promise.resolve().then(() => lookup(host, { all: true, verbatim: true }));
+    } catch (error) {
+      release();
+      throw new TargetError('WEBHOOK_URL_INVALID');
+    }
+    lookupPromise.catch(() => {}).finally(release);
+
     let timer;
     try {
       addresses = await Promise.race([
-        lookup(host, { all: true, verbatim: true }),
-        new Promise((_, reject) => { timer = setTimeout(() => reject(new Error('DNS_TIMEOUT')), LOOKUP_TIMEOUT_MS); }),
+        lookupPromise,
+        new Promise((_, reject) => {
+          timer = setTimeout(() => reject(new Error('DNS_TIMEOUT')), timeoutMs);
+          if (typeof timer.unref === 'function') timer.unref();
+        }),
       ]);
     } catch {
       throw new TargetError('WEBHOOK_URL_INVALID');

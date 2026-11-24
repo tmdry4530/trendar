@@ -41,7 +41,16 @@ export default function RepoRow({ repo, onOpen, onToggleBookmark, onDelete }: Pr
         : 'delta delta--flat';
 
   return (
-    <tr onClick={handleRowClick}>
+    <tr
+      tabIndex={0}
+      onClick={handleRowClick}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleRowClick();
+        }
+      }}
+    >
       {/* bookmark */}
       <td className={styles.cellIcon}>
         <button

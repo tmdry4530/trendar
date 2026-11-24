@@ -1,3 +1,4 @@
+// @ts-check
 // utils/crypto.js — OAuth 토큰 암복호화(AES-256-GCM) 및 세션 토큰 유틸
 import { randomBytes, createCipheriv, createDecipheriv, createHash } from 'node:crypto';
 

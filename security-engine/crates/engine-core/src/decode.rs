@@ -294,7 +294,7 @@ pub fn find_high_entropy_tokens(
             }
             let ent = shannon_entropy(token);
             if ent >= threshold {
-                hits.push((token[..token.len().min(48)].to_string(), ent));
+                hits.push((crate::normalize::truncate_utf8_bytes(token, 48).to_string(), ent));
                 break;
             }
         }

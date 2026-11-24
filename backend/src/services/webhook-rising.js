@@ -1,3 +1,4 @@
+// @ts-check
 // 수집이 끝났을 때 대시보드 신생 급상승 상위 8개에 새로 들어온 저장소를 알림 대기열에 넣는다.
 import { randomUUID } from 'node:crypto';
 import * as repoModel from '../models/repo.model.js';

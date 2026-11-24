@@ -6,6 +6,7 @@ import { useAsync } from '../lib/useAsync';
 import { getRepo, updateRepo, deleteRepo } from '../api/repos';
 import { listQueries } from '../api/queries';
 import {
+  formatDelta,
   formatStars,
   formatInt,
   formatPercent,
@@ -87,8 +88,20 @@ export default function RepoDetailPage() {
 
   const { repo, snapshots } = data;
 
-  // 최신 스냅샷 (마지막 원소)
+  // 최신 스냅샷 (마지막 원소) 및 기간 변화량
   const latest = snapshots.length > 0 ? snapshots[snapshots.length - 1] : null;
+  const netStarChange = snapshots.length >= 2
+    ? snapshots[snapshots.length - 1].stars - snapshots[0].stars
+    : null;
+
+  async function handleCopyUrl() {
+    try {
+      await navigator.clipboard.writeText(repo.html_url);
+      toast.info(t('detail.copiedUrl'));
+    } catch {
+      toast.error(t('errors.generic'));
+    }
+  }
 
   // 연결된 쿼리 이름
   const matchedQuery = queries.find((q) => q.id === repo.query_id);
@@ -172,16 +185,25 @@ export default function RepoDetailPage() {
         <div className={`col ${styles.leftCol}`}>
           {/* 정보 패널 */}
           <div className="panel">
-            <h1 className={styles.repoName}>
-              <a
-                href={repo.html_url}
-                target="_blank"
-                rel="noreferrer"
-                className="link mono"
+            <div className={styles.titleRow}>
+              <h1 className={styles.repoName}>
+                <a
+                  href={repo.html_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="link mono"
+                >
+                  {repo.full_name} ↗
+                </a>
+              </h1>
+              <button
+                type="button"
+                className="btn btn--sm btn--ghost"
+                onClick={handleCopyUrl}
               >
-                {repo.full_name} ↗
-              </a>
-            </h1>
+                {t('detail.copyUrl')}
+              </button>
+            </div>
             {repo.description ? (
               <p className={`muted ${styles.description}`}>{repo.description}</p>
             ) : (
@@ -204,9 +226,9 @@ export default function RepoDetailPage() {
               )}
               {repo.star_delta !== 0 && (
                 <span
-                  className={`pill ${
-                    repo.star_delta > 0 ? styles.deltaUp : styles.deltaDown
-                  }`}
+                  className={
+                    repo.star_delta > 0 ? 'pill pill--accent' : `pill ${styles.deltaDown}`
+                  }
                 >
                   {t('dashboard.table.increase')} {formatStars(Math.abs(repo.star_delta), locale)}
                 </span>
@@ -226,11 +248,18 @@ export default function RepoDetailPage() {
           <div className="panel">
             <div className="panel__head">
               <span className="panel__title">{t('detail.historyTitle')}</span>
-              {snapshots.length > 0 && (
-                <span className="muted" style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>
-                  {t('detail.records', { count: formatInt(snapshots.length, locale) })}
-                </span>
-              )}
+              <div className="center">
+                {netStarChange !== null && netStarChange !== 0 && (
+                  <span className={`pill ${netStarChange > 0 ? 'pill--accent' : ''}`}>
+                    {t('detail.netChange', { delta: formatDelta(netStarChange, locale) })}
+                  </span>
+                )}
+                {snapshots.length > 0 && (
+                  <span className="muted" style={{ fontSize: 11, fontFamily: 'var(--mono)' }}>
+                    {t('detail.records', { count: formatInt(snapshots.length, locale) })}
+                  </span>
+                )}
+              </div>
             </div>
             {snapshots.length <= 1 ? (
               <EmptyState
@@ -266,8 +295,14 @@ export default function RepoDetailPage() {
                 setNote(e.target.value);
                 setNoteDirty(true);
               }}
+              onKeyDown={(e) => {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'Enter' && noteDirty && !savingNote) {
+                  e.preventDefault();
+                  void handleSaveNote();
+                }
+              }}
             />
-            <div style={{ marginTop: 10 }}>
+            <div className={`spread ${styles.noteFooter}`}>
               <button
                 className="btn btn--primary btn--sm"
                 onClick={handleSaveNote}
@@ -275,6 +310,9 @@ export default function RepoDetailPage() {
               >
                 {savingNote ? t('detail.saving') : t('common.save')}
               </button>
+              <span className="mono faint" style={{ fontSize: 11 }}>
+                {t('detail.saveShortcut')}
+              </span>
             </div>
           </div>
 

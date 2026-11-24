@@ -8,12 +8,12 @@ import { errorHandler } from '../src/middleware/errorHandler.js';
 import { createWebhookController } from '../src/controllers/webhook.controller.js';
 import { createWebhookRouter, noStore } from '../src/routes/webhook.routes.js';
 import { hashSessionToken } from '../src/utils/crypto.js';
-import { resolveTarget } from '../src/utils/webhook-target.js';
+import { createLookupLimiter, resolveTarget } from '../src/utils/webhook-target.js';
 
 const USERS = { alice: { id: 1, login: 'alice' }, bob: { id: 2, login: 'bob' } };
 const DNS = { 'hooks.example.com': ['93.184.216.34'], 'intranet.example.com': ['10.0.0.8'], 'discord.com': ['162.159.128.233'] };
 
-function fixture({ allowPrivate = false, claimedElsewhere = false } = {}) {
+function fixture({ allowPrivate = false, claimedElsewhere = false, resolveTarget: customResolveTarget } = {}) {
   const state = { endpoints: new Map(), deliveries: [], seeded: [], cancelled: [], dispatched: [], clock: new Date('2026-11-10T00:00:00Z'), secrets: 0 };
   const model = {
     getEndpoint: async (userId) => (state.endpoints.has(userId) ? { ...state.endpoints.get(userId) } : null),
@@ -57,13 +57,13 @@ function fixture({ allowPrivate = false, claimedElsewhere = false } = {}) {
       },
     },
     encrypt: (plain) => `enc(${Buffer.from(plain).toString('base64')})`,
-    resolveTarget: (url, options) => resolveTarget(url, {
+    resolveTarget: customResolveTarget ?? ((url, options) => resolveTarget(url, {
       ...options,
       lookup: async (host) => {
         if (!DNS[host]) throw Object.assign(new Error('nx'), { code: 'ENOTFOUND' });
         return DNS[host].map((address) => ({ address, family: 4 }));
       },
-    }),
+    })),
     allowPrivate: () => allowPrivate,
     now: () => state.clock,
     newId: () => `00000000-0000-4000-8000-${String(state.deliveries.length + 1).padStart(12, '0')}`,
@@ -321,5 +321,49 @@ test('다른 발신 작업이 테스트 ping을 먼저 집으면 그 결과를 �
     assert.equal(res.status, 200);
     assert.deepEqual([res.json.data.delivery.status, res.json.data.delivery.status_code], ['success', 204]);
     assert.equal(state.sleeps, 3);
+  });
+});
+
+test('Daybreak #2: 느린 DNS 타임아웃 후에도 underlying lookup 종료 전 재요청은 429/503으로 차단된다', async (t) => {
+  t.mock.method(console, 'error', () => {});
+  const limiter = createLookupLimiter({ maxInFlight: 1 });
+  let releasePending;
+  let lookupCalls = 0;
+  const { app } = fixture({
+    resolveTarget: (url, options) => resolveTarget(url, {
+      ...options,
+      limiter,
+      timeoutMs: 15,
+      lookup: async (host) => {
+        lookupCalls += 1;
+        if (host === 'hang.example.com') {
+          return new Promise((resolve) => { releasePending = resolve; });
+        }
+        return [{ address: '93.184.216.34', family: 4 }];
+      },
+    }),
+  });
+  await withServer(app, async (call) => {
+    const first = await call('alice', 'PUT', '', { url: 'https://hang.example.com/hook' });
+    assert.equal(first.status, 400);
+    assert.equal(first.json.error.code, 'WEBHOOK_URL_INVALID');
+    assert.equal(lookupCalls, 1);
+
+    const retrySameUser = await call('alice', 'PUT', '', { url: 'https://hooks.example.com/hook' });
+    assert.equal(retrySameUser.status, 429);
+    assert.equal(retrySameUser.json.error.code, 'WEBHOOK_SAVE_IN_PROGRESS');
+    assert.equal(lookupCalls, 1);
+
+    const otherUser = await call('bob', 'PUT', '', { url: 'https://hooks.example.com/hook' });
+    assert.equal(otherUser.status, 503);
+    assert.equal(otherUser.json.error.code, 'WEBHOOK_DNS_BUSY');
+    assert.equal(lookupCalls, 1);
+
+    releasePending([{ address: '93.184.216.34', family: 4 }]);
+    await new Promise((r) => setTimeout(r, 10));
+
+    const recovered = await call('alice', 'PUT', '', { url: 'https://hooks.example.com/hook' });
+    assert.equal(recovered.status, 201);
+    assert.equal(lookupCalls, 2);
   });
 });

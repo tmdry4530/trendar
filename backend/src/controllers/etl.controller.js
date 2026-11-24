@@ -1,3 +1,4 @@
+// @ts-check
 // controllers/etl.controller.js — 수동 수집(일일 한도 게이트) + 상태 조회
 import { runPipelineForUser, isRunning } from '../etl/pipeline.js';
 import * as usersModel from '../models/user.model.js';
@@ -35,9 +36,11 @@ export function createEtlController(deps) {
         // 수집 루프에 진입하기 전(작업 전) 거부만 환불한다. 루프 도중 실패는
         // 이미 자원을 소비했으므로 환불하지 않는다 (R1.4). 환불 자체가 실패해도
         // 원래 에러를 그대로 사용자에게 전달한다.
-        if (e.refundable) {
+        if (/** @type {any} */ (e)?.refundable) {
           try { await users.refundManualEtl(req.user.id, today); }
-          catch (refundErr) { console.error(`[etl] user#${req.user.id} 한도 환불 실패:`, refundErr.message); }
+          catch (refundErr) {
+            console.error(`[etl] user#${req.user.id} 한도 환불 실패:`, refundErr instanceof Error ? refundErr.message : String(refundErr));
+          }
         }
         throw e;
       }

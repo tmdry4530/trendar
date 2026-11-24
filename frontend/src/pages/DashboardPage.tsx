@@ -1,8 +1,9 @@
 // DashboardPage.tsx — 대시보드: KPI 카드 5개(언어 top3 포함) + 신생 급상승 · 성장률 상위
+import { Link } from 'react-router-dom';
 import { useAsync } from '../lib/useAsync';
 import { getStats, getTrends, getRising, getBookmarks, getLanguages } from '../api/stats';
 import { formatCompactAge, formatInt } from '../lib/format';
-import { LoadingState, ErrorState } from '../components/States';
+import { ErrorState, TableSkeleton } from '../components/States';
 import StatCard from '../components/StatCard';
 import TrendTable from '../components/TrendTable';
 import RisingTable from '../components/RisingTable';
@@ -29,10 +30,10 @@ export default function DashboardPage() {
       <div className={`stagger grid-5 ${styles.statsGrid}`} style={{ marginBottom: 'var(--gap)' }}>
         {stats.loading ? (
           <>
-            <StatCard label={t('dashboard.cards.projects')} value="—" hint={t('dashboard.cards.projectsHint')} />
-            <StatCard label={t('dashboard.cards.filters')} value="—" hint={t('dashboard.cards.filtersHint')} />
-            <StatCard label={t('dashboard.cards.saved')} value="—" hint={t('dashboard.cards.savedHint')} />
-            <StatCard label={t('dashboard.cards.lastCollection')} value="—" hint={t('dashboard.cards.lastCollectionHint')} />
+            <StatCard label={t('dashboard.cards.projects')} value="" hint={t('dashboard.cards.projectsHint')} loading />
+            <StatCard label={t('dashboard.cards.filters')} value="" hint={t('dashboard.cards.filtersHint')} loading />
+            <StatCard label={t('dashboard.cards.saved')} value="" hint={t('dashboard.cards.savedHint')} loading />
+            <StatCard label={t('dashboard.cards.lastCollection')} value="" hint={t('dashboard.cards.lastCollectionHint')} loading />
             <LangMiniCard data={null} loading />
           </>
         ) : stats.error ? (
@@ -45,16 +46,20 @@ export default function DashboardPage() {
               label={t('dashboard.cards.projects')}
               value={formatInt(stats.data.total_repos, locale)}
               hint={t('dashboard.cards.projectsHint')}
+              to="/repos"
             />
             <StatCard
               label={t('dashboard.cards.filters')}
               value={formatInt(stats.data.active_queries, locale)}
               hint={t('dashboard.cards.filtersHint')}
+              to="/queries"
+              accent={stats.data.active_queries > 0}
             />
             <StatCard
               label={t('dashboard.cards.saved')}
               value={formatInt(stats.data.bookmarked, locale)}
               hint={t('dashboard.cards.savedHint')}
+              to="/repos?bookmarked=true"
             />
             <StatCard
               label={t('dashboard.cards.lastCollection')}
@@ -79,9 +84,7 @@ export default function DashboardPage() {
             </div>
             <div className={styles.panelBody}>
               {rising.loading ? (
-                <div style={{ padding: 'var(--pad)' }}>
-                  <LoadingState />
-                </div>
+                <TableSkeleton rows={6} columns={5} />
               ) : (
                 <RisingTable
                   data={rising.data}
@@ -100,12 +103,13 @@ export default function DashboardPage() {
             <div className={`panel__head ${styles.sectionHead}`}>
               <span className={`panel__title ${styles.sectionTitle}`}>{t('dashboard.movers.title')}</span>
               <span className={styles.titleEn}>{t('dashboard.movers.subtitle')}</span>
+              <Link to="/repos?sort=growth" className={styles.viewAll}>
+                {t('dashboard.viewAll')}
+              </Link>
             </div>
             <div className={styles.panelBody}>
               {trends.loading ? (
-                <div style={{ padding: 'var(--pad)' }}>
-                  <LoadingState />
-                </div>
+                <TableSkeleton rows={6} columns={5} />
               ) : (
                 <TrendTable
                   data={trends.data}
@@ -124,12 +128,13 @@ export default function DashboardPage() {
         <div className={`panel__head ${styles.sectionHead}`}>
           <span className={`panel__title ${styles.sectionTitle}`}>{t('dashboard.saved.title')}</span>
           <span className={styles.titleEn}>{t('dashboard.saved.subtitle')}</span>
+          <Link to="/repos?bookmarked=true" className={styles.viewAll}>
+            {t('dashboard.viewAll')}
+          </Link>
         </div>
         <div className={styles.panelBody}>
           {bookmarks.loading ? (
-            <div style={{ padding: 'var(--pad)' }}>
-              <LoadingState />
-            </div>
+            <TableSkeleton rows={4} columns={4} />
           ) : (
             <BookmarkTable
               data={bookmarks.data}

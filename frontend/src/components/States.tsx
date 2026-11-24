@@ -63,3 +63,22 @@ export function InlineSpinner({ label }: { label?: string }) {
     </span>
   );
 }
+
+/** 테이블 로딩 스켈레톤 — 레이아웃 점프 방지 */
+export function TableSkeleton({ rows = 5, columns = 4 }: { rows?: number; columns?: number }) {
+  const { t } = useTranslation();
+  return (
+    <div className={styles.skeletonWrap} role="status" aria-label={t('common.loadingData')}>
+      {Array.from({ length: rows }).map((_, r) => (
+        <div key={r} className={styles.skeletonRow}>
+          {Array.from({ length: columns }).map((__, c) => (
+            <span
+              key={c}
+              className={`skeleton ${styles.skeletonCell} ${c === 0 ? styles.skeletonPrimary : ''}`}
+            />
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}

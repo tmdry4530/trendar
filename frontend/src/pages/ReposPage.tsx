@@ -1,12 +1,12 @@
 // ReposPage.tsx — 레포 목록 페이지 (화면 ③).
 import { useState, useEffect, useCallback } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useAsync } from '../lib/useAsync';
 import { listRepos, updateRepo, deleteRepo } from '../api/repos';
 import { listQueries } from '../api/queries';
 import { formatInt } from '../lib/format';
 import { useToast } from '../components/Toast';
-import { LoadingState, EmptyState, ErrorState } from '../components/States';
+import { EmptyState, ErrorState, TableSkeleton } from '../components/States';
 import ConfirmDialog from '../components/ConfirmDialog';
 import RepoRow from '../components/RepoRow';
 import Help from '../components/Help';
@@ -16,33 +16,71 @@ import { useTranslation } from 'react-i18next';
 import { toSupportedLocale } from '../i18n';
 
 const LIMIT = 30;
+const VALID_SORTS = new Set<RepoSort>(['stars', 'growth', 'recent']);
+
+function parseSortParam(raw: string | null): RepoSort {
+  return raw && VALID_SORTS.has(raw as RepoSort) ? (raw as RepoSort) : 'stars';
+}
+
+function parseIntParam(raw: string | null): number | undefined {
+  if (!raw || !/^[1-9]\d*$/.test(raw)) return undefined;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) ? n : undefined;
+}
+
+function parseOffsetParam(raw: string | null): number {
+  if (!raw || !/^\d+$/.test(raw)) return 0;
+  const n = Number(raw);
+  return Number.isSafeInteger(n) && n >= 0 ? n : 0;
+}
 
 export default function ReposPage() {
   const toast = useToast();
   const { t, i18n } = useTranslation();
   const locale = toSupportedLocale(i18n.resolvedLanguage) ?? 'en';
+  const [searchParams, setSearchParams] = useSearchParams();
 
-  // ── filter state ────────────────────────────────────────────────────────
-  const [search, setSearch] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [queryId, setQueryId] = useState<number | undefined>(undefined);
-  const [sort, setSort] = useState<RepoSort>('stars');
-  const [bookmarked, setBookmarked] = useState(false);
-  const [offset, setOffset] = useState(0);
+  // ── filter state (URL 쿼리 파라미터와 동기화해 뒤로가기·새로고침 시 유지) ──
+  const initialSearch = searchParams.get('search') ?? '';
+  const [search, setSearch] = useState(initialSearch);
+  const [debouncedSearch, setDebouncedSearch] = useState(initialSearch);
+  const [queryId, setQueryId] = useState<number | undefined>(() => parseIntParam(searchParams.get('query_id')));
+  const [sort, setSort] = useState<RepoSort>(() => parseSortParam(searchParams.get('sort')));
+  const [bookmarked, setBookmarked] = useState(() => searchParams.get('bookmarked') === 'true');
+  const [offset, setOffset] = useState(() => parseOffsetParam(searchParams.get('offset')));
 
   // debounce search ~300ms
   useEffect(() => {
     const timer = setTimeout(() => {
-      setDebouncedSearch(search);
-      setOffset(0);
+      setDebouncedSearch((prev) => {
+        if (prev !== search) setOffset(0);
+        return search;
+      });
     }, 300);
     return () => clearTimeout(timer);
   }, [search]);
 
-  // reset offset when filters change (except offset itself)
+  // sync state -> URL search params
   useEffect(() => {
+    const next = new URLSearchParams();
+    if (debouncedSearch.trim()) next.set('search', debouncedSearch.trim());
+    if (queryId !== undefined) next.set('query_id', String(queryId));
+    if (sort !== 'stars') next.set('sort', sort);
+    if (bookmarked) next.set('bookmarked', 'true');
+    if (offset > 0) next.set('offset', String(offset));
+    if (next.toString() !== searchParams.toString()) {
+      setSearchParams(next, { replace: true });
+    }
+  }, [debouncedSearch, queryId, sort, bookmarked, offset, searchParams, setSearchParams]);
+
+  const handleResetFilters = useCallback(() => {
+    setSearch('');
+    setDebouncedSearch('');
+    setQueryId(undefined);
+    setSort('stars');
+    setBookmarked(false);
     setOffset(0);
-  }, [queryId, sort, bookmarked]);
+  }, []);
 
   // ── queries dropdown ─────────────────────────────────────────────────────
   const { data: queriesData } = useAsync(() => listQueries(), []);
@@ -153,20 +191,51 @@ export default function ReposPage() {
 
       {/* toolbar */}
       <div className={`panel ${styles.toolbar}`}>
-        <input
-          className={`input ${styles.searchInput}`}
-          type="search"
-          placeholder={t('projects.searchPlaceholder')}
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          aria-label={t('projects.searchLabel')}
-        />
+        <div className={styles.searchWrap}>
+          <svg
+            className={styles.searchIcon}
+            width="14"
+            height="14"
+            viewBox="0 0 16 16"
+            fill="none"
+            aria-hidden="true"
+          >
+            <circle cx="7" cy="7" r="5.25" stroke="currentColor" strokeWidth="1.5" />
+            <path d="M11 11l3.5 3.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+          </svg>
+          <input
+            className={`input ${styles.searchInput}`}
+            type="search"
+            placeholder={t('projects.searchPlaceholder')}
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            aria-label={t('projects.searchLabel')}
+          />
+          {search && (
+            <button
+              type="button"
+              className={styles.clearBtn}
+              onClick={() => {
+                setSearch('');
+                setDebouncedSearch('');
+                setOffset(0);
+              }}
+              aria-label={t('projects.clearSearch')}
+              title={t('projects.clearSearch')}
+            >
+              ×
+            </button>
+          )}
+        </div>
         <div className={styles.filterRow}>
           {/* query filter */}
           <select
             className={`select ${styles.filterSelect}`}
             value={queryId ?? ''}
-            onChange={(e) => setQueryId(e.target.value ? Number(e.target.value) : undefined)}
+            onChange={(e) => {
+              setQueryId(e.target.value ? Number(e.target.value) : undefined);
+              setOffset(0);
+            }}
             aria-label={t('projects.filterLabel')}
           >
             <option value="">{t('projects.allFilters')}</option>
@@ -181,7 +250,10 @@ export default function ReposPage() {
           <select
             className={`select ${styles.filterSelect}`}
             value={sort}
-            onChange={(e) => setSort(e.target.value as RepoSort)}
+            onChange={(e) => {
+              setSort(e.target.value as RepoSort);
+              setOffset(0);
+            }}
             aria-label={t('projects.sortLabel')}
           >
             <option value="stars">{t('projects.sortStars')}</option>
@@ -193,16 +265,33 @@ export default function ReposPage() {
           <button
             type="button"
             className={`btn ${bookmarked ? 'btn--active' : ''}`}
-            onClick={() => setBookmarked((b) => !b)}
+            onClick={() => {
+              setBookmarked((b) => !b);
+              setOffset(0);
+            }}
             aria-pressed={bookmarked}
           >
             ★ {t('projects.savedOnly')}
           </button>
+
+          {(filtersActive || sort !== 'stars') && (
+            <button
+              type="button"
+              className={`btn btn--ghost btn--sm ${styles.resetBtn}`}
+              onClick={handleResetFilters}
+            >
+              ↺ {t('projects.resetFilters')}
+            </button>
+          )}
         </div>
       </div>
 
       {/* states */}
-      {loading && <LoadingState />}
+      {loading && (
+        <div className={`panel panel--flush ${styles.tableWrap}`}>
+          <TableSkeleton rows={8} columns={5} />
+        </div>
+      )}
       {error && <ErrorState message={error} onRetry={reload} />}
 
       {!loading && !error && data && (
@@ -212,6 +301,11 @@ export default function ReposPage() {
               <EmptyState
                 title={t('projects.noResults')}
                 hint={t('projects.adjustFilters')}
+                action={
+                  <button type="button" className="btn btn--sm" onClick={handleResetFilters}>
+                    ↺ {t('projects.resetFilters')}
+                  </button>
+                }
               />
             ) : (
               <EmptyState
@@ -232,7 +326,7 @@ export default function ReposPage() {
             )
           ) : (
             <div className={`panel panel--flush ${styles.tableWrap}`}>
-              <table className="table table--rows table--center">
+              <table className="table table--rows">
                 <thead>
                   <tr>
                     <th aria-label={t('projects.savedOnly')} />

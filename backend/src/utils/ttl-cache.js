@@ -1,4 +1,5 @@
-export function createTtlCache({ ttlMs, maxEntries = 500, now = Date.now }) {
+// @ts-check
+export function createTtlCache({ ttlMs, maxEntries = 500, maxPending = 100, now = Date.now }) {
   const entries = new Map();
   const pending = new Map();
 
@@ -30,6 +31,12 @@ export function createTtlCache({ ttlMs, maxEntries = 500, now = Date.now }) {
     const value = get(key);
     if (entries.has(key)) return Promise.resolve(value);
     if (pending.has(key)) return pending.get(key);
+    if (Number.isFinite(maxPending) && pending.size >= maxPending) {
+      return Promise.reject(Object.assign(new Error('Cache pending capacity exceeded'), {
+        status: 503,
+        code: 'CACHE_OVERLOADED',
+      }));
+    }
     let dependencyExpiresAt = Infinity;
     const context = {
       dependsOn(dependencyKey) {
@@ -69,6 +76,9 @@ export function createTtlCache({ ttlMs, maxEntries = 500, now = Date.now }) {
     size() {
       for (const key of entries.keys()) get(key);
       return entries.size;
+    },
+    pendingSize() {
+      return pending.size;
     },
   };
 }

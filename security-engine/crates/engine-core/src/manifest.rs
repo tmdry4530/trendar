@@ -69,7 +69,10 @@ fn analyze_package_json(path: &str, content: &str, rules: &CompiledRuleset, sign
                     rule_id: rule.id.clone(),
                     category: "manifest".into(),
                     weight: rule.weight,
-                    detail: format!("{path} scripts.{hook}: {}", &cmd[..cmd.len().min(120)]),
+                    detail: format!(
+                        "{path} scripts.{hook}: {}",
+                        crate::normalize::truncate_utf8_bytes(cmd, 120)
+                    ),
                 });
                 break;
             }
@@ -108,7 +111,10 @@ fn analyze_vscode_tasks(path: &str, content: &str, rules: &CompiledRuleset, sign
                 rule_id: "MAN-VSCODE-FOLDEROPEN".into(),
                 category: "manifest".into(),
                 weight: rules.vscode_autorun_weight,
-                detail: format!("{path} folderOpen task: {}", &cmd[..cmd.len().min(120)]),
+                detail: format!(
+                    "{path} folderOpen task: {}",
+                    crate::normalize::truncate_utf8_bytes(cmd, 120)
+                ),
             });
         }
     }
@@ -163,11 +169,7 @@ pub fn analyze_manifest(input: &ManifestInput, rules: &CompiledRuleset) -> Manif
 
     for file in &input.files {
         let lower_path = file.path.to_lowercase();
-        let capped = if file.content.len() > rules.limits.max_readme_bytes {
-            &file.content[..rules.limits.max_readme_bytes]
-        } else {
-            &file.content
-        };
+        let capped = crate::normalize::truncate_utf8_bytes(&file.content, rules.limits.max_readme_bytes);
         if lower_path == "package.json" || lower_path.ends_with("/package.json") {
             score += analyze_package_json(&file.path, capped, rules, &mut signals);
         } else if lower_path.ends_with(".vscode/tasks.json") {

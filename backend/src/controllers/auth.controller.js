@@ -1,12 +1,15 @@
+// @ts-check
 // controllers/auth.controller.js — GitHub OAuth 로그인 플로우 + 계정 수명주기
 import { randomBytes } from 'node:crypto';
 import * as oauthService from '../services/github-oauth.js';
 import * as usersModel from '../models/user.model.js';
 import * as sessionsModel from '../models/session.model.js';
+import * as subscriptionsModel from '../models/subscription.model.js';
 import * as publicModel from '../models/public.model.js';
 import { encryptToken, newSessionToken, hashSessionToken } from '../utils/crypto.js';
+import { httpError } from '../middleware/errorHandler.js';
 import { SESSION_COOKIE } from '../middleware/requireAuth.js';
-import { effectivePlan } from '../services/billing.js';
+import { effectivePlan, hasBlockingSubscription } from '../services/billing.js';
 import { createSignupAttribution } from '../services/public-analytics.js';
 import { isAdmin } from '../config/admin.js';
 
@@ -32,6 +35,7 @@ function allowedNext(value) {
 
 export function createAuthController(deps) {
   const { oauth, users, sessions, crypto } = deps;
+  const subscriptions = deps.subscriptions || { findByUserId: async () => null };
   const planOf = deps.effectivePlan || effectivePlan;
   const attribution =
     deps.attribution || createSignupAttribution({ addDailyMetrics: publicModel.addDailyMetrics });
@@ -68,7 +72,7 @@ export function createAuthController(deps) {
     try {
       accessToken = await oauth.exchangeCode(code);
     } catch (err) {
-      console.error('[auth] 토큰 교환 실패:', err.message);
+      console.error('[auth] 토큰 교환 실패:', err instanceof Error ? err.message : String(err));
       return res.redirect('/login?error=exchange');
     }
 
@@ -76,7 +80,7 @@ export function createAuthController(deps) {
     try {
       profile = await oauth.fetchGithubUser(accessToken);
     } catch (err) {
-      console.error('[auth] 프로필 조회 실패:', err.message);
+      console.error('[auth] 프로필 조회 실패:', err instanceof Error ? err.message : String(err));
       return res.redirect('/login?error=profile');
     }
 
@@ -136,6 +140,14 @@ export function createAuthController(deps) {
 
   async function deleteAccount(req, res, next) {
     try {
+      const sub = await subscriptions.findByUserId(req.user.id);
+      if (hasBlockingSubscription(sub)) {
+        throw httpError(
+          409,
+          'ACTIVE_SUBSCRIPTION',
+          '진행 중인 구독이 있어 계정을 삭제할 수 없습니다. 구독 관리 포털에서 먼저 해지해 주세요.',
+        );
+      }
       await users.deleteById(req.user.id);
       res.clearCookie(SESSION_COOKIE);
       res.json({ ok: true, data: null });
@@ -151,6 +163,7 @@ export default createAuthController({
   oauth: oauthService,
   users: usersModel,
   sessions: sessionsModel,
+  subscriptions: subscriptionsModel,
   crypto: { encryptToken, newSessionToken, hashSessionToken },
   effectivePlan,
 });

@@ -1,3 +1,4 @@
+// @ts-check
 // I/O 및 오케스트레이션 어댑터 — 순수 정적 분석·룰 평가·지문 추출은 Rust NAPI-RS 엔진(security-engine.js)에 위임한다.
 // README 텍스트, 검색 응답 메타, 소유자 계정 생성일만 읽어 판정하며 링크·첨부·코드는 내려받거나 실행하지 않는다.
 import {
@@ -105,7 +106,7 @@ export async function fetchReadme(octokit, owner, name, { timeoutMs = DEFAULT_RE
     const text = typeof data === 'string' ? data : Buffer.from(data ?? '').toString('utf8');
     return truncateUtf8Bytes(text, MAX_README_BYTES);
   } catch (error) {
-    if (error?.status === 404) return null;
+    if (/** @type {any} */ (error)?.status === 404) return null;
     throw error;
   }
 }
@@ -146,8 +147,26 @@ function isRateLimited(error) {
 
 // GitHub REST 2차 한도(분당 약 900회)를 넘지 않도록 요청 시작 간격을 둔다.
 // Rust NAPI-RS AsyncTask로 비동기 판정해 Express 이벤트 루프를 블로킹하지 않는다.
+/**
+ * @param {{
+ *   model: any,
+ *   fetchReadme?: typeof fetchReadme,
+ *   fetchOwnerCreatedAt?: typeof fetchOwnerCreatedAt,
+ *   analyzeReadmeAsync?: typeof analyzeReadmeAsync,
+ *   log?: Pick<Console, 'warn'>,
+ *   now?: () => Date,
+ *   concurrency?: number,
+ *   minIntervalMs?: number,
+ *   sleep?: (ms: number) => Promise<void>,
+ *   clock?: () => number,
+ *   enableMultilingual?: boolean,
+ *   enableManifest?: boolean,
+ *   fetchManifest?: ((octokit: any, owner: string, name: string) => Promise<any>) | null,
+ * }} deps
+ */
 export function createReadmeScanner({
-  model, fetchReadme: fetch = fetchReadme, fetchOwnerCreatedAt: fetchOwner = fetchOwnerCreatedAt, log = console,
+  model, fetchReadme: fetch = fetchReadme, fetchOwnerCreatedAt: fetchOwner = fetchOwnerCreatedAt,
+  analyzeReadmeAsync: analyze = analyzeReadmeAsync, log = console,
   now = () => new Date(), concurrency = 4, minIntervalMs = 100, sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
   clock = Date.now, enableMultilingual = true, enableManifest = false, fetchManifest = null,
 }) {
@@ -208,10 +227,29 @@ export function createReadmeScanner({
       }
 
       // Rust NAPI-RS AsyncTask로 비블로킹 분석 (분류 + 특성 + SimHash 단일 패스)
-      const report = await analyzeReadmeAsync(text, repo, {
-        enableMultilingual,
-        enableMetadataScoring: true,
-      });
+      // 분석기 예외·패닉 시 fail-open(기존 clean 유지 또는 미판정 노출)을 막기 위해 즉시 격리(malicious)하고
+      // repo_pushed_at=null로 저장해 다음 스캔에서 자동 재검사한다.
+      let report;
+      try {
+        report = await analyze(text, repo, {
+          enableMultilingual,
+          enableMetadataScoring: true,
+        });
+      } catch (error) {
+        const err = /** @type {any} */ (error);
+        log.warn(`[readme-scan] github_id=${id} analyze=${err?.code ?? err?.name ?? 'error'}`);
+        await model.upsertVerdict({
+          github_id: id,
+          verdict: 'malicious',
+          rule_version: RULE_VERSION,
+          evidence: 'analyzer_error_quarantine',
+          repo_pushed_at: null,
+          scanned_at: new Date(now()),
+        });
+        result.scanned++;
+        result.malicious++;
+        return;
+      }
       let verdict = report.verdict;
       let evidence = report.evidence;
       const traits = report.traits;
@@ -252,7 +290,8 @@ export function createReadmeScanner({
             }
           }
         } catch (error) {
-          log.warn(`[readme-scan] github_id=${id} manifest=${error?.code ?? error?.status ?? 'error'}`);
+          const err = /** @type {any} */ (error);
+          log.warn(`[readme-scan] github_id=${id} manifest=${err?.code ?? err?.status ?? 'error'}`);
         }
       }
 
@@ -270,7 +309,8 @@ export function createReadmeScanner({
       try {
         await scanOne(entry);
       } catch (error) {
-        log.warn(`[readme-scan] github_id=${entry[0]} store=${error?.code ?? error?.name ?? 'error'}`);
+        const err = /** @type {any} */ (error);
+        log.warn(`[readme-scan] github_id=${entry[0]} store=${err?.code ?? err?.name ?? 'error'}`);
       }
     }
 
@@ -283,7 +323,8 @@ export function createReadmeScanner({
     try {
       result.cluster_hidden = await model.refreshClusters();
     } catch (error) {
-      log.warn(`[readme-scan] cluster refresh=${error?.code ?? error?.name ?? 'error'}`);
+      const err = /** @type {any} */ (error);
+      log.warn(`[readme-scan] cluster refresh=${err?.code ?? err?.name ?? 'error'}`);
     }
     return result;
   }

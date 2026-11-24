@@ -1,3 +1,4 @@
+// @ts-check
 // controllers/billing.controller.js — 신규 결제 차단 + 웹훅 수신 + 구독 조회·포털.
 import { httpError } from '../middleware/errorHandler.js';
 import { createCustomerPortalSession, verifyWebhookSignature } from '../utils/paddle.js';

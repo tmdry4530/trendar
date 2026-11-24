@@ -183,7 +183,7 @@
   to { opacity: 1; transform: translateY(0); }
 }
 
-@media (max-width: 1240px) {
+@media (max-width: 1360px) {
   .tagline { display: none; }
   .inner { gap: 16px; }
   .links { margin-left: 0; }

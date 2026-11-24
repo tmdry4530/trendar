@@ -1,8 +1,18 @@
 import mysql from 'mysql2/promise';
 
+const DEFAULT_DB_QUEUE_LIMIT = 200;
+const DEFAULT_DB_CONNECT_TIMEOUT_MS = 10000;
+
+function positiveIntOr(raw, fallback) {
+  const parsed = Number(raw);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : fallback;
+}
+
 export function buildPoolConfig(env = process.env) {
+  const queueLimit = positiveIntOr(env.DB_QUEUE_LIMIT, DEFAULT_DB_QUEUE_LIMIT);
+  const connectTimeout = positiveIntOr(env.DB_CONNECT_TIMEOUT_MS, DEFAULT_DB_CONNECT_TIMEOUT_MS);
   const url = env.MYSQL_URL || env.DATABASE_URL;
-  if (url) return { uri: url, timezone: 'Z' };
+  if (url) return { uri: url, timezone: 'Z', queueLimit, connectTimeout };
   return {
     host: env.DB_HOST,
     port: Number(env.DB_PORT) || 3306,
@@ -11,6 +21,8 @@ export function buildPoolConfig(env = process.env) {
     database: env.DB_NAME,
     waitForConnections: true,
     connectionLimit: 10,
+    queueLimit,
+    connectTimeout,
     timezone: 'Z',
   };
 }

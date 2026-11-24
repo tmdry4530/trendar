@@ -1,3 +1,4 @@
+// @ts-check
 // 급상승 알림 웹훅 발신: 본문·서명 생성, 검증한 주소로의 요청, 재시도와 자동 꺼짐.
 import { createHmac } from 'node:crypto';
 import http from 'node:http';
@@ -182,7 +183,8 @@ export function createDispatcher({
     try {
       return await attempt(delivery);
     } catch (error) {
-      log.warn(`[webhook] user#${delivery.user_id} delivery=${delivery.delivery_id} error=${error?.code ?? error?.name ?? 'error'}`);
+      const err = /** @type {any} */ (error);
+      log.warn(`[webhook] user#${delivery.user_id} delivery=${delivery.delivery_id} error=${err?.code ?? err?.name ?? 'error'}`);
       if (settled.has(delivery.id)) return null;
       const attempts = delivery.attempts + 1;
       const done = new Date(now());

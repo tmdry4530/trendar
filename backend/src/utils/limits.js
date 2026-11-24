@@ -16,8 +16,21 @@ const DEFAULT_SEARCH_INTERVAL_MS = 2100;
 // GitHub Search API 30회/분 한도(R2.4): 설정값이 더 작아도 이 간격 미만으로는 호출하지 않는다.
 const MIN_SEARCH_INTERVAL_MS = 2100;
 const DEFAULT_PUBLIC_IMAGE_RATE_LIMIT_PER_MIN = 120;
+const DEFAULT_PUBLIC_PAGE_RATE_LIMIT_PER_MIN = 120;
+const DEFAULT_PUBLIC_CACHE_MAX_PENDING = 100;
 const DEFAULT_PUBLIC_ANALYTICS_FLUSH_MS = 60000;
 const DEFAULT_TRUST_PROXY_HOPS = 1;
+
+export const REPO_LIST_DEFAULT_LIMIT = 30;
+export const REPO_LIST_MAX_LIMIT = 100;
+export const REPO_LIST_MAX_OFFSET = 10000;
+export const REPO_SEARCH_MAX_LENGTH = 200;
+export const REPO_TRENDS_DEFAULT_LIMIT = 10;
+export const REPO_BOOKMARKS_DEFAULT_LIMIT = 8;
+export const REPO_RANK_MAX_LIMIT = 50;
+export const SNAPSHOT_DEFAULT_LIMIT = 500;
+export const SNAPSHOT_MAX_LIMIT = 1000;
+export const SNAPSHOT_MAX_DAYS = 365;
 
 // 모든 로그인 사용자 공통 한도. 기존 Pro 설정(PRO_MAX_*)만 따르고 낮은 구 무료 MAX_*는 쓰지 않는다.
 export function maxQueriesPerUser() {
@@ -92,6 +105,49 @@ export function publicImageRateLimitPerMin() {
   const parsed = Number(process.env.PUBLIC_IMAGE_RATE_LIMIT_PER_MIN);
   if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_PUBLIC_IMAGE_RATE_LIMIT_PER_MIN;
   return parsed;
+}
+
+export function publicPageRateLimitPerMin() {
+  const parsed = Number(process.env.PUBLIC_PAGE_RATE_LIMIT_PER_MIN);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_PUBLIC_PAGE_RATE_LIMIT_PER_MIN;
+  return parsed;
+}
+
+export function publicCacheMaxPending() {
+  const parsed = Number(process.env.PUBLIC_CACHE_MAX_PENDING);
+  if (!Number.isInteger(parsed) || parsed <= 0) return DEFAULT_PUBLIC_CACHE_MAX_PENDING;
+  return parsed;
+}
+
+/**
+ * @param {unknown} raw
+ * @param {{ defaultValue: number, min: number, max: number }} options
+ * @returns {number}
+ */
+export function clampBoundedInt(raw, { defaultValue, min, max }) {
+  if (raw === undefined || raw === null || raw === '') return defaultValue;
+  if (typeof raw === 'string' && raw.trim() === '') return defaultValue;
+  const parsed = Number(raw);
+  if (!Number.isFinite(parsed)) return defaultValue;
+  const truncated = Math.trunc(parsed);
+  if (truncated < min) return min;
+  if (truncated > max) return max;
+  return truncated;
+}
+
+/**
+ * @param {unknown} raw
+ * @returns {number | null}
+ */
+export function parsePositiveIntParam(raw) {
+  if (typeof raw === 'number') {
+    return Number.isSafeInteger(raw) && raw > 0 ? raw : null;
+  }
+  if (typeof raw === 'string' && /^[1-9]\d*$/.test(raw.trim())) {
+    const parsed = Number(raw.trim());
+    return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : null;
+  }
+  return null;
 }
 
 export function publicAnalyticsFlushMs() {

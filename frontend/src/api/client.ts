@@ -29,6 +29,9 @@ const ERROR_MESSAGE_KEYS: Record<string, string> = {
   WEBHOOK_URL_INVALID: 'errors.webhookUrlInvalid',
   WEBHOOK_URL_BLOCKED: 'errors.webhookUrlBlocked',
   WEBHOOK_TEST_RATE_LIMITED: 'errors.webhookTestRateLimit',
+  WEBHOOK_SAVE_IN_PROGRESS: 'errors.webhookSaveInProgress',
+  WEBHOOK_DNS_BUSY: 'errors.webhookDnsBusy',
+  ACTIVE_SUBSCRIPTION: 'errors.activeSubscription',
 };
 
 function errorMessage(code: string, status: number): string {

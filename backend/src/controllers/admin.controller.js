@@ -1,3 +1,4 @@
+// @ts-check
 import * as adminModel from '../models/admin.model.js';
 import { PAGE_SIZE } from '../models/admin.model.js';
 import { allFeeds, feedKey } from '../config/public-feeds.js';
@@ -55,7 +56,8 @@ export function createAdminController({ model = adminModel, feeds = allFeeds, cl
       }
       const page = Number(rawPage);
       const result = await model.listUsers({ search, page });
-      const items = result.items.map((row) => ({
+      const userRows = Array.isArray(result.items) ? result.items : [];
+      const items = userRows.map((row) => ({
         id: numeric(row.id), login: row.login, name: row.name ?? null,
         created_at: date(row.created_at), plan: row.plan === 'pro' ? 'pro' : 'free',
         subscription_status: subscriptionStatus(row.subscription_status),
@@ -73,7 +75,8 @@ export function createAdminController({ model = adminModel, feeds = allFeeds, cl
     try {
       const configured = feeds();
       const rows = await model.listFeeds();
-      const byKey = new Map(rows.map((row) => [feedKey(row.kind, row.slug), row]));
+      const feedRows = Array.isArray(rows) ? rows : [];
+      const byKey = new Map(feedRows.map((row) => /** @type {[string, any]} */ ([feedKey(row.kind, row.slug), row])));
       const items = configured.map(({ kind, slug, name }) => {
         const row = byKey.get(feedKey(kind, slug));
         return {

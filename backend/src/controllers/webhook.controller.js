@@ -1,3 +1,4 @@
+// @ts-check
 // 급상승 알림 웹훅 설정 API. 모든 처리는 세션 사용자(req.user.id) 범위다.
 import { randomBytes, randomUUID } from 'node:crypto';
 import { httpError } from '../middleware/errorHandler.js';
@@ -57,10 +58,18 @@ export function createWebhookController({
     resolving.add(userId);
     try {
       const url = parseTargetUrl(raw, { allowPrivate: allowPrivate() });
-      await resolveTarget(url, { allowPrivate: allowPrivate() });
+      await resolveTarget(url, { allowPrivate: allowPrivate(), key: userId });
       return url;
     } catch (error) {
-      if (error instanceof TargetError) throw httpError(400, error.code, '수신 URL로 보낼 수 없습니다.');
+      if (error instanceof TargetError) {
+        if (error.code === 'WEBHOOK_SAVE_IN_PROGRESS') {
+          throw httpError(429, error.code, '이전 저장 요청을 처리하고 있습니다. 잠시 후 다시 시도해 주세요.');
+        }
+        if (error.code === 'WEBHOOK_DNS_BUSY') {
+          throw httpError(503, error.code, '주소 확인 요청이 많아 잠시 후 다시 시도해 주세요.');
+        }
+        throw httpError(400, error.code, '수신 URL로 보낼 수 없습니다.');
+      }
       throw error;
     } finally {
       resolving.delete(userId);
@@ -91,7 +100,7 @@ export function createWebhookController({
       try {
         await model.createEndpoint(userId, { ...target, secret_enc: encrypt(secret) });
       } catch (e) {
-        if (e.code !== 'ER_DUP_ENTRY') throw e;
+        if (/** @type {any} */ (e)?.code !== 'ER_DUP_ENTRY') throw e;
         // 같은 사용자의 등록 요청이 겹쳤다. 먼저 만들어진 설정의 서명 키를 유지하고 URL만 바꾼다.
         await model.updateEndpointUrl(userId, target);
         return res.json({ ok: true, data: { endpoint: endpointView(await model.getEndpoint(userId)) } });

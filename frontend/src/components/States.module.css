@@ -35,3 +35,24 @@
   color: var(--muted);
   font-size: 13px;
 }
+.skeletonWrap {
+  display: flex;
+  flex-direction: column;
+  padding: 6px 14px 12px;
+}
+.skeletonRow {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  height: 39px;
+  border-bottom: 1px solid var(--line-soft);
+}
+.skeletonRow:last-child { border-bottom: none; }
+.skeletonCell {
+  height: 12px;
+  flex: 0 0 64px;
+}
+.skeletonPrimary {
+  flex: 1 1 auto;
+  max-width: 240px;
+}

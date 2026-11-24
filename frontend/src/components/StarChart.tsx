@@ -7,11 +7,11 @@
 //   surface  = #14171c  (--surface)
 import {
   ResponsiveContainer,
-  LineChart,
+  AreaChart,
+  Area,
   CartesianGrid,
   XAxis,
   YAxis,
-  Line,
   Tooltip,
 } from 'recharts';
 import type { TooltipProps } from 'recharts';
@@ -60,8 +60,14 @@ export default function StarChart({ snapshots }: Props) {
   const { i18n } = useTranslation();
   const locale = toSupportedLocale(i18n.resolvedLanguage) ?? 'en';
   return (
-    <ResponsiveContainer width="100%" height={200}>
-      <LineChart data={snapshots} margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
+    <ResponsiveContainer width="100%" height={220}>
+      <AreaChart data={snapshots} margin={{ top: 8, right: 20, left: 0, bottom: 0 }}>
+        <defs>
+          <linearGradient id="starAreaFill" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#3ddc84" stopOpacity={0.26} />
+            <stop offset="100%" stopColor="#3ddc84" stopOpacity={0} />
+          </linearGradient>
+        </defs>
         {/* stroke colors mirror tokens.css — recharts can't read CSS vars */}
         <CartesianGrid stroke="#232830" strokeDasharray="2 4" vertical={false} />
         <XAxis
@@ -79,22 +85,23 @@ export default function StarChart({ snapshots }: Props) {
         <YAxis
           tickFormatter={(v: number) => formatStars(v, locale)}
           tick={{ fill: '#8b93a1', fontSize: 11, fontFamily: 'IBM Plex Mono, ui-monospace, monospace' }}
-          width={48}
+          width={52}
           axisLine={{ stroke: '#232830' }}
           tickLine={{ stroke: '#232830' }}
           domain={['auto', 'auto']}
         />
-        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#232830', strokeWidth: 1 }} />
-        <Line
+        <Tooltip content={<CustomTooltip />} cursor={{ stroke: '#2aa563', strokeDasharray: '3 3', strokeWidth: 1 }} />
+        <Area
           type="monotone"
           dataKey="stars"
           stroke="#3ddc84"
           strokeWidth={2}
-          dot={{ r: 2, fill: '#3ddc84', strokeWidth: 0 }}
-          activeDot={{ r: 4, fill: '#3ddc84', strokeWidth: 0 }}
+          fill="url(#starAreaFill)"
+          dot={snapshots.length <= 24 ? { r: 2.5, fill: '#3ddc84', strokeWidth: 0 } : false}
+          activeDot={{ r: 5, fill: '#3ddc84', stroke: '#14171c', strokeWidth: 2 }}
           isAnimationActive
         />
-      </LineChart>
+      </AreaChart>
     </ResponsiveContainer>
   );
 }

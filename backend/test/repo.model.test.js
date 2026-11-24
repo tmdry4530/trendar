@@ -2,12 +2,16 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   assembleRisingCandidates,
+  buildBookmarkedReposQuery,
+  buildFindManyQuery,
   buildRisingCandidatesQuery,
   buildRisingEarliestQuery,
   buildRisingSnapshotsQuery,
+  buildSnapshotsQuery,
   buildTrendsQuery,
   rankUserRising,
 } from '../src/models/repo.model.js';
+import { createRepoController } from '../src/controllers/repo.controller.js';
 
 const HOUR = 3_600_000;
 const NOW = new Date('2026-10-30T00:00:00Z');
@@ -108,4 +112,78 @@ test('빠르게 성장 중 쿼리 — 1,000스타 이상만 증가율로 정렬�
   const compactSql = sql.replace(/\s+/g, ' ');
   assert.match(compactSql, /r\.stars >= 1000 AND r\.star_delta > 0 AND .* ORDER BY r\.growth_rate DESC/);
   assert.deepEqual(params, [42, 10]);
+});
+
+test('Daybreak #5: 목록·성장률·북마크·스냅샷 쿼리가 limit·offset·days·검색 길이를 엄격히 제한한다', () => {
+  // findMany: oversized, negative, zero, NaN, fractional, long search
+  assert.deepEqual(buildFindManyQuery(7, { limit: 999999999, offset: 999999999 }).params, [7, 100, 10000]);
+  assert.deepEqual(buildFindManyQuery(7, { limit: 0, offset: -50 }).params, [7, 1, 0]);
+  assert.deepEqual(buildFindManyQuery(7, { limit: 'NaN', offset: 'Infinity' }).params, [7, 30, 0]);
+  assert.deepEqual(buildFindManyQuery(7, { limit: 12.9, offset: 4.8 }).params, [7, 12, 4]);
+  const longSearch = buildFindManyQuery(7, { search: 'a'.repeat(300) });
+  assert.equal(longSearch.params[1].length, 202); // % + 200 + %
+
+  // trends & bookmarks: [1, 50]
+  assert.deepEqual(buildTrendsQuery(7, 9999).params, [7, 50]);
+  assert.deepEqual(buildTrendsQuery(7, -5).params, [7, 1]);
+  assert.deepEqual(buildTrendsQuery(7, 'oops').params, [7, 10]);
+  assert.deepEqual(buildBookmarkedReposQuery(7, 9999).params, [7, 50]);
+  assert.deepEqual(buildBookmarkedReposQuery(7, 0).params, [7, 1]);
+  assert.deepEqual(buildBookmarkedReposQuery(7, undefined).params, [7, 8]);
+
+  // snapshots: bounded LIMIT + chronological outer ORDER BY ASC + optional days
+  const snapDefault = buildSnapshotsQuery(7, 99);
+  assert.match(snapDefault.sql, /ORDER BY s\.captured_at DESC, s\.id DESC\s+LIMIT \?/);
+  assert.match(snapDefault.sql, /ORDER BY captured_at ASC, id ASC/);
+  assert.deepEqual(snapDefault.params, [7, 99, 500]);
+
+  const snapClamped = buildSnapshotsQuery(7, 99, { limit: 50000, days: 9999 });
+  assert.match(snapClamped.sql, /INTERVAL \? DAY/);
+  assert.deepEqual(snapClamped.params, [7, 99, 365, 1000]);
+});
+
+test('Daybreak #5: repo 컨트롤러가 비정상 pagination·ID 입력을 검증 및 상한 고정한다', async () => {
+  const calls = [];
+  const ctrl = createRepoController({
+    findMany: async (uid, opts) => { calls.push(['findMany', uid, opts]); return { items: [], total: 0 }; },
+    findById: async (uid, id) => { calls.push(['findById', uid, id]); return { repo: { id }, snapshots: [] }; },
+    getSnapshots: async (uid, id, opts) => { calls.push(['getSnapshots', uid, id, opts]); return []; },
+    trends: async (uid, limit) => { calls.push(['trends', uid, limit]); return []; },
+    bookmarkedRepos: async (uid, limit) => { calls.push(['bookmarks', uid, limit]); return []; },
+  });
+  const res = { body: null, json(v) { this.body = v; return this; } };
+  const nextErr = async (fn, req) => {
+    let err = null;
+    await fn(req, res, (e) => { err = e; });
+    return err;
+  };
+
+  assert.equal(
+    await nextErr(ctrl.list, { user: { id: 1 }, query: { limit: '1000000', offset: '-10', search: 'x'.repeat(250) } }),
+    null,
+  );
+  assert.equal(calls.at(-1)[2].limit, 100);
+  assert.equal(calls.at(-1)[2].offset, 0);
+  assert.equal(calls.at(-1)[2].search.length, 200);
+
+  const badQueryId = await nextErr(ctrl.list, { user: { id: 1 }, query: { query_id: '-3' } });
+  assert.equal(badQueryId?.status, 400);
+  assert.equal(badQueryId?.code, 'VALIDATION_ERROR');
+
+  for (const badId of ['0', '-1', '1.5', 'abc']) {
+    const err = await nextErr(ctrl.snapshots, { user: { id: 1 }, params: { id: badId }, query: {} });
+    assert.equal(err?.status, 400, badId);
+  }
+
+  assert.equal(
+    await nextErr(ctrl.snapshots, { user: { id: 1 }, params: { id: '42' }, query: { limit: '999999', days: '500' } }),
+    null,
+  );
+  assert.deepEqual(calls.at(-1), ['getSnapshots', 1, 42, { limit: 1000, days: 365 }]);
+
+  assert.equal(await nextErr(ctrl.trends, { user: { id: 1 }, query: { limit: '9999' } }), null);
+  assert.deepEqual(calls.at(-1), ['trends', 1, 50]);
+
+  assert.equal(await nextErr(ctrl.bookmarks, { user: { id: 1 }, query: { limit: '9999' } }), null);
+  assert.deepEqual(calls.at(-1), ['bookmarks', 1, 50]);
 });
